@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ProcessNodeData, NodeType } from '@/types/flow';
 import { useFlowStore } from '@/store/flowStore';
+import { useThemeStore } from '@/store/themeStore';
 
 const nodeConfig: Record<
   NodeType,
@@ -68,6 +69,8 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
   const updateNodeLabel = useFlowStore((state) => state.updateNodeLabel);
+  const theme = useThemeStore((state) => state.theme);
+  const isDark = theme === 'dark';
 
   const config = nodeConfig[data.nodeType] || nodeConfig.action;
   const Icon = config.icon;
@@ -92,11 +95,11 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={`
-        relative min-w-[240px] max-w-[320px] rounded-2xl
+        relative w-[220px] rounded-xl
         bg-gradient-to-br ${config.gradient}
         backdrop-blur-xl
-        border-2 ${config.borderColor}
-        ${selected ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-transparent' : ''}
+        border ${config.borderColor}
+        ${selected ? 'ring-2 ring-white/50 ring-offset-1 ring-offset-transparent' : ''}
         shadow-lg shadow-black/20
         transition-all duration-200
         hover:shadow-xl hover:shadow-black/30
@@ -106,25 +109,35 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
       {/* Glow effect on selection */}
       {selected && (
         <div
-          className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${config.gradient} blur-xl opacity-50 -z-10`}
+          className={`absolute inset-0 rounded-xl bg-gradient-to-br ${config.gradient} blur-xl opacity-50 -z-10`}
         />
       )}
 
+      {/* Top handle (input) - primary for vertical layouts */}
       <Handle
         type="target"
         position={Position.Top}
-        className="!w-3 !h-3 !bg-white/80 !border-2 !border-gray-400 hover:!bg-white transition-colors"
+        id="top"
+        className="!w-2.5 !h-2.5 !bg-white/80 !border-2 !border-gray-400 hover:!bg-white transition-colors !-top-1"
       />
 
-      <div className="p-4 flex items-start gap-3">
+      {/* Left handle (input) - for horizontal layouts */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left"
+        className="!w-2.5 !h-2.5 !bg-white/80 !border-2 !border-gray-400 hover:!bg-white transition-colors !-left-1"
+      />
+
+      <div className="p-2.5 flex items-start gap-2">
         <div
           className={`
-            flex-shrink-0 w-10 h-10 rounded-xl ${config.iconBg}
+            flex-shrink-0 w-8 h-8 rounded-lg ${config.iconBg}
             flex items-center justify-center
-            shadow-lg
+            shadow-md
           `}
         >
-          <Icon className="w-5 h-5 text-white" />
+          <Icon className="w-4 h-4 text-white" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -136,52 +149,66 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
               onBlur={handleSave}
               onKeyDown={handleKeyDown}
               autoFocus
-              className="w-full bg-white/20 rounded-lg px-2 py-1 text-sm font-semibold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-white/50"
+              className={`w-full bg-white/20 rounded px-1.5 py-0.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-white/50 ${
+                isDark ? 'text-white' : 'text-gray-900'
+              }`}
             />
           ) : (
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+            <div className="flex items-center gap-1">
+              <h3 className={`text-xs font-semibold truncate leading-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 {data.label}
               </h3>
               <button
                 onClick={() => setIsEditing(true)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/20 rounded"
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-white/20 rounded flex-shrink-0"
               >
-                <Pencil className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+                <Pencil className={`w-2.5 h-2.5 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} />
               </button>
             </div>
           )}
           {data.description && (
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
+            <p className={`text-[10px] mt-0.5 line-clamp-2 leading-tight ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               {data.description}
             </p>
           )}
-          <span className="inline-block mt-2 text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400 bg-white/30 dark:bg-black/20 px-2 py-0.5 rounded-full">
+          <span className={`inline-block mt-1 text-[8px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded-full ${
+            isDark ? 'text-gray-400 bg-black/20' : 'text-gray-500 bg-white/30'
+          }`}>
             {data.nodeType}
           </span>
         </div>
       </div>
 
+      {/* Bottom handle (output) - primary for vertical layouts */}
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!w-3 !h-3 !bg-white/80 !border-2 !border-gray-400 hover:!bg-white transition-colors"
+        id="bottom"
+        className="!w-2.5 !h-2.5 !bg-white/80 !border-2 !border-gray-400 hover:!bg-white transition-colors !-bottom-1"
       />
 
-      {/* Decision node extra handles */}
+      {/* Right handle (output) - for horizontal layouts */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right"
+        className="!w-2.5 !h-2.5 !bg-white/80 !border-2 !border-gray-400 hover:!bg-white transition-colors !-right-1"
+      />
+
+      {/* Decision node extra handles for Yes/No branches */}
       {data.nodeType === 'decision' && (
         <>
           <Handle
             type="source"
-            position={Position.Left}
+            position={Position.Top}
             id="no"
-            className="!w-3 !h-3 !bg-red-400 !border-2 !border-red-600 hover:!bg-red-300 transition-colors"
+            className="!w-2.5 !h-2.5 !bg-red-400 !border-2 !border-red-600 hover:!bg-red-300 transition-colors !-top-1 !left-1/4"
           />
           <Handle
             type="source"
-            position={Position.Right}
+            position={Position.Bottom}
             id="yes"
-            className="!w-3 !h-3 !bg-green-400 !border-2 !border-green-600 hover:!bg-green-300 transition-colors"
+            className="!w-2.5 !h-2.5 !bg-green-400 !border-2 !border-green-600 hover:!bg-green-300 transition-colors !-bottom-1 !left-3/4"
           />
         </>
       )}

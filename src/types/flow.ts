@@ -9,7 +9,12 @@ export interface ProcessNodeData extends Record<string, unknown> {
   icon?: string;
 }
 
+export interface GroupNodeData extends Record<string, unknown> {
+  label: string;
+}
+
 export type ProcessNode = Node<ProcessNodeData>;
+export type GroupNode = Node<GroupNodeData>;
 export type ProcessEdge = Edge<{ label?: string }>;
 
 export interface GeneratedFlow {
