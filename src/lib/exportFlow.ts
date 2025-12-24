@@ -1,8 +1,31 @@
 import { Node } from '@xyflow/react';
-import { ProcessEdge, ProcessNodeData, NodeType } from '@/types/flow';
+import { ProcessEdge, ProcessNodeData, NodeType, NodeShape } from '@/types/flow';
 
 /**
- * Convert node type to Mermaid shape syntax
+ * Convert node shape to Mermaid syntax
+ */
+function shapeToMermaidSyntax(shape: NodeShape | undefined, label: string): string {
+  const escapedLabel = label.replace(/"/g, "'");
+
+  switch (shape) {
+    case 'stadium':
+      return `([${escapedLabel}])`;
+    case 'diamond':
+      return `{${escapedLabel}}`;
+    case 'circle':
+      return `((${escapedLabel}))`;
+    case 'database':
+      return `[(${escapedLabel})]`;
+    case 'subroutine':
+      return `[[${escapedLabel}]]`;
+    case 'rectangle':
+    default:
+      return `[${escapedLabel}]`;
+  }
+}
+
+/**
+ * Convert node type to Mermaid shape syntax (fallback when no explicit shape)
  */
 function nodeTypeToShape(nodeType: NodeType, label: string): string {
   const escapedLabel = label.replace(/"/g, "'");
@@ -24,6 +47,23 @@ function nodeTypeToShape(nodeType: NodeType, label: string): string {
     default:
       return `[${escapedLabel}]`; // Rectangle for actions
   }
+}
+
+/**
+ * Get the Mermaid shape syntax for a node, preferring explicit shape over type-based default
+ */
+function getNodeMermaidShape(node: Node<ProcessNodeData>): string {
+  const label = node.data?.label || node.id;
+  const shape = node.data?.shape;
+  const nodeType = node.data?.nodeType || 'action';
+
+  // If node has an explicit shape set, use it
+  if (shape) {
+    return shapeToMermaidSyntax(shape, label);
+  }
+
+  // Otherwise fall back to type-based shape
+  return nodeTypeToShape(nodeType, label);
 }
 
 /**
@@ -73,9 +113,7 @@ export function flowToMermaid(
 
       childNodes.forEach(node => {
         const nodeId = sanitizeId(node.id);
-        const label = node.data?.label || nodeId;
-        const nodeType = node.data?.nodeType || 'action';
-        const shape = nodeTypeToShape(nodeType, label);
+        const shape = getNodeMermaidShape(node);
         lines.push(`        ${nodeId}${shape}`);
       });
 
@@ -88,9 +126,7 @@ export function flowToMermaid(
   const standaloneNodes = nodesByGroup.get(undefined) || [];
   standaloneNodes.forEach(node => {
     const nodeId = sanitizeId(node.id);
-    const label = node.data?.label || nodeId;
-    const nodeType = node.data?.nodeType || 'action';
-    const shape = nodeTypeToShape(nodeType, label);
+    const shape = getNodeMermaidShape(node);
     lines.push(`    ${nodeId}${shape}`);
   });
 

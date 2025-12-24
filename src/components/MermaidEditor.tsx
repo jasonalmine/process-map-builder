@@ -12,9 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
-  Sparkles,
   Wand2,
-  ExternalLink,
 } from 'lucide-react';
 import { useFlowStore } from '@/store/flowStore';
 import { useThemeStore } from '@/store/themeStore';
@@ -22,7 +20,6 @@ import { layoutFlow } from '@/lib/layoutFlow';
 import { parseMermaid, convertMermaidToFlow } from '@/lib/parseMermaid';
 import { flowToMermaid } from '@/lib/exportFlow';
 import CheatSheet from './CheatSheet';
-import TemplatesPanel from './TemplatesPanel';
 import AIAssistPanel from './AIAssistPanel';
 
 // Dynamically import CodeMirror to avoid SSR issues
@@ -42,7 +39,7 @@ export default function MermaidEditor({ defaultExpanded = false }: MermaidEditor
   const [copied, setCopied] = useState(false);
   const [synced, setSynced] = useState(false);
   const [enableGroups, setEnableGroups] = useState(true);
-  const [activeTab, setActiveTab] = useState<'ai-assist' | 'editor' | 'templates' | 'cheatsheet'>('ai-assist');
+  const [activeTab, setActiveTab] = useState<'ai-assist' | 'editor' | 'cheatsheet'>('ai-assist');
 
   const { nodes, edges, setNodes, setEdges, clearFlow } = useFlowStore();
   const theme = useThemeStore((state) => state.theme);
@@ -133,17 +130,6 @@ export default function MermaidEditor({ defaultExpanded = false }: MermaidEditor
     setTimeout(() => setCopied(false), 2000);
   }, [code]);
 
-  // Insert template at cursor
-  const insertTemplate = useCallback((template: string) => {
-    setCode((prev) => {
-      if (!prev.trim()) {
-        return template;
-      }
-      return prev + '\n' + template.split('\n').slice(1).join('\n');
-    });
-    setActiveTab('editor');
-  }, []);
-
   return (
     <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-20">
       <motion.div
@@ -211,7 +197,6 @@ export default function MermaidEditor({ defaultExpanded = false }: MermaidEditor
                   {[
                     { id: 'ai-assist', label: 'AI Assist', icon: Wand2 },
                     { id: 'editor', label: 'Editor', icon: Code2 },
-                    { id: 'templates', label: 'Templates', icon: Sparkles },
                     { id: 'cheatsheet', label: 'Cheat Sheet', icon: AlertCircle },
                   ].map((tab) => (
                     <button
@@ -387,10 +372,6 @@ export default function MermaidEditor({ defaultExpanded = false }: MermaidEditor
                       setCode(mermaid);
                       setActiveTab('editor');
                     }} />
-                  )}
-
-                  {activeTab === 'templates' && (
-                    <TemplatesPanel onInsert={insertTemplate} />
                   )}
 
                   {activeTab === 'cheatsheet' && <CheatSheet />}

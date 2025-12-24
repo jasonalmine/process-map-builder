@@ -105,8 +105,13 @@ export default function NodePalette() {
           return (
             <button
               key={item.type}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/flowcraft-node-type', item.type);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
               onClick={() => handleAddNode(item.type)}
-              className={`group relative flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all ${bgClass}`}
+              className={`group relative flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all cursor-grab active:cursor-grabbing ${bgClass}`}
             >
               <div className={`w-6 h-6 rounded-md flex items-center justify-center ${nodeStyle.iconBg}`}>
                 <Icon className="w-3.5 h-3.5 text-white" />
@@ -123,7 +128,7 @@ export default function NodePalette() {
                     : 'bg-white text-gray-900 border border-gray-200 shadow-md'
                 }`}
               >
-                Click to add {item.label.toLowerCase()}
+                Drag or click to add
               </div>
             </button>
           );

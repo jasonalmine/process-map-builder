@@ -2,11 +2,22 @@ import { Node, Edge } from '@xyflow/react';
 
 export type NodeType = 'trigger' | 'action' | 'decision' | 'delay' | 'outcome' | 'integration' | 'tool';
 
+// Shape types that map to Mermaid syntax
+export type NodeShape = 'rectangle' | 'stadium' | 'diamond' | 'circle' | 'database' | 'subroutine';
+
 export interface ProcessNodeData extends Record<string, unknown> {
   label: string;
   description?: string;
   nodeType: NodeType;
   icon?: string;
+  // Shape for visual rendering (defaults based on nodeType if not set)
+  shape?: NodeShape;
+  // Style overrides
+  customColor?: string;
+  borderStyle?: 'solid' | 'dashed' | 'dotted';
+  // Size (for resizable nodes)
+  width?: number;
+  height?: number;
   // Tool-specific fields
   toolId?: string;      // ID from tools.ts
   toolDomain?: string;  // Domain for logo.dev

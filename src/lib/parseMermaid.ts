@@ -1,10 +1,10 @@
-import { NodeType, ProcessNode, ProcessEdge } from '@/types/flow';
+import { NodeType, NodeShape, ProcessNode, ProcessEdge } from '@/types/flow';
 import { TOOLS, Tool } from '@/data/tools';
 
 export interface ParsedMermaidNode {
   id: string;
   label: string;
-  shape: 'rect' | 'diamond' | 'rounded' | 'stadium';
+  shape: 'rect' | 'diamond' | 'rounded' | 'stadium' | 'circle' | 'database' | 'subroutine';
   subgraphId?: string; // Which subgraph this node belongs to
 }
 
@@ -149,12 +149,16 @@ export function parseMermaid(code: string): ParseResult {
  * Parse a single node definition like A["Label"] or B{Decision}
  */
 function parseNodeDefinition(text: string): ParsedMermaidNode | null {
-  // Match patterns: A["Label"], A[Label], A{Label}, A(Label), A((Label)), A([Label])
+  // Match patterns: A["Label"], A[Label], A{Label}, A(Label), A((Label)), A([Label]), A[(Label)], A[[Label]]
   const patterns = [
+    // Database/cylinder shape: A[(Label)]
+    { regex: /^([A-Za-z_][A-Za-z0-9_]*)\s*\[\(["']?([^\)"']+)["']?\)\]/, shape: 'database' as const },
+    // Subroutine: A[[Label]]
+    { regex: /^([A-Za-z_][A-Za-z0-9_]*)\s*\[\[["']?([^\]"']+)["']?\]\]/, shape: 'subroutine' as const },
     // Stadium shape: A([Label])
     { regex: /^([A-Za-z_][A-Za-z0-9_]*)\s*\(\[["']?([^\]"']+)["']?\]\)/, shape: 'stadium' as const },
     // Circle/double circle: A((Label))
-    { regex: /^([A-Za-z_][A-Za-z0-9_]*)\s*\(\(["']?([^)"']+)["']?\)\)/, shape: 'rounded' as const },
+    { regex: /^([A-Za-z_][A-Za-z0-9_]*)\s*\(\(["']?([^)"']+)["']?\)\)/, shape: 'circle' as const },
     // Diamond: A{Label}
     { regex: /^([A-Za-z_][A-Za-z0-9_]*)\s*\{["']?([^}"']+)["']?\}/, shape: 'diamond' as const },
     // Rounded: A(Label)
@@ -420,6 +424,20 @@ export function convertMermaidToFlow(
     });
   }
 
+  // Map parsed shape to NodeShape
+  const mapParsedShapeToNodeShape = (parsedShape: ParsedMermaidNode['shape']): NodeShape => {
+    switch (parsedShape) {
+      case 'rect': return 'rectangle';
+      case 'diamond': return 'diamond';
+      case 'rounded': return 'rectangle'; // Rounded in Mermaid is a rectangle variant
+      case 'stadium': return 'stadium';
+      case 'circle': return 'circle';
+      case 'database': return 'database';
+      case 'subroutine': return 'subroutine';
+      default: return 'rectangle';
+    }
+  };
+
   // Create process nodes with tool detection
   parsed.nodes.forEach((node, index) => {
     // Check if this node matches a known tool
@@ -429,6 +447,7 @@ export function convertMermaidToFlow(
       label: node.label,
       description: '',
       nodeType: matchedTool ? 'tool' : inferNodeType(node, parsed.edges, parsed.nodes),
+      shape: mapParsedShapeToNodeShape(node.shape),
     };
 
     // Add tool info if matched

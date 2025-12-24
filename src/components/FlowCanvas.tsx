@@ -48,9 +48,12 @@ import { KeyboardShortcutsModal, useKeyboardShortcuts } from './KeyboardShortcut
 import { useFlowStore } from '@/store/flowStore';
 import { useThemeStore, COLOR_THEMES, getThemeConfig } from '@/store/themeStore';
 import { useViewModeStore } from '@/store/viewModeStore';
-import { layoutFlow, LayoutDirection } from '@/lib/layoutFlow';
-import { ProcessNodeData } from '@/types/flow';
+import { useContextMenuStore } from '@/store/contextMenuStore';
+import { layoutFlow, LayoutDirection, LayoutSpacing, DEFAULT_SPACING } from '@/lib/layoutFlow';
+import { ProcessNodeData, NodeType } from '@/types/flow';
 import { Node } from '@xyflow/react';
+import ContextMenu from './ContextMenu';
+import SpacingControls from './SpacingControls';
 
 // Control button with visible label
 function ControlButton({
@@ -106,7 +109,8 @@ function FlowCanvasInner() {
     canUndo,
     canRedo,
   } = useFlowStore();
-  const { zoomIn, zoomOut, fitView, getViewport, getNodes } = useReactFlow();
+  const { zoomIn, zoomOut, fitView, getViewport, getNodes, screenToFlowPosition } = useReactFlow();
+  const { open: openContextMenu, close: closeContextMenu } = useContextMenuStore();
 
   const handleFitView = useCallback(() => {
     const currentNodes = getNodes();
@@ -115,6 +119,7 @@ function FlowCanvasInner() {
     }
   }, [fitView, getNodes]);
   const [currentLayout, setCurrentLayout] = useState<LayoutDirection>('TB');
+  const [spacing, setSpacing] = useState<LayoutSpacing>(DEFAULT_SPACING);
   const [selectedNode, setSelectedNode] = useState<Node<ProcessNodeData> | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -208,19 +213,22 @@ function FlowCanvasInner() {
   );
 
   const handleLayoutChange = useCallback(
-    (direction: LayoutDirection) => {
-      // Filter out group nodes for layout calculation
+    (direction: LayoutDirection, newSpacing?: LayoutSpacing) => {
       const processNodes = nodes.filter((n) => n.type === 'processNode');
       if (processNodes.length === 0) return;
-      const layoutedNodes = layoutFlow(processNodes, edges, direction);
-      // Merge back with group nodes
-      const groupNodes = nodes.filter((n) => n.type === 'groupNode');
-      setNodes([...groupNodes, ...layoutedNodes]);
+      // Pass ALL nodes (including groups) so layoutFlow can handle group-aware layout
+      const spacingToUse = newSpacing || spacing;
+      const layoutedNodes = layoutFlow(nodes, edges, direction, spacingToUse);
+      setNodes(layoutedNodes);
       setCurrentLayout(direction);
       setTimeout(() => fitView({ padding: 0.2 }), 50);
     },
-    [nodes, edges, setNodes, fitView]
+    [nodes, edges, setNodes, fitView, spacing]
   );
+
+  const handleApplySpacing = useCallback(() => {
+    handleLayoutChange(currentLayout, spacing);
+  }, [handleLayoutChange, currentLayout, spacing]);
 
   const handleAddGroup = useCallback(() => {
     const viewport = getViewport();
@@ -345,6 +353,65 @@ function FlowCanvasInner() {
     setShowExportMenu(false);
   }, []);
 
+  // Context menu handler
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      if (isViewMode) return;
+
+      // Check if we clicked on a node or edge
+      const target = event.target as HTMLElement;
+      const nodeElement = target.closest('.react-flow__node');
+      const edgeElement = target.closest('.react-flow__edge');
+
+      if (nodeElement) {
+        const nodeId = nodeElement.getAttribute('data-id');
+        openContextMenu({ x: event.clientX, y: event.clientY }, 'node', nodeId);
+      } else if (edgeElement) {
+        const edgeId = edgeElement.getAttribute('data-id');
+        openContextMenu({ x: event.clientX, y: event.clientY }, 'edge', edgeId);
+      } else {
+        openContextMenu({ x: event.clientX, y: event.clientY }, 'canvas', null);
+      }
+    },
+    [isViewMode, openContextMenu]
+  );
+
+  // Drag-to-canvas handlers
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      if (isViewMode) return;
+
+      const nodeType = event.dataTransfer.getData('application/flowcraft-node-type') as NodeType;
+      if (!nodeType) return;
+
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      const newNode = {
+        id: `node_${Date.now()}`,
+        type: 'processNode',
+        position,
+        data: {
+          label: nodeType.charAt(0).toUpperCase() + nodeType.slice(1),
+          nodeType,
+          description: '',
+        },
+      };
+
+      useFlowStore.getState().addNode(newNode);
+    },
+    [isViewMode, screenToFlowPosition]
+  );
+
   const handleShare = useCallback(async () => {
     try {
       // Try Supabase short links first
@@ -398,6 +465,9 @@ function FlowCanvasInner() {
         elementsSelectable={!isViewMode}
         panOnDrag={true}
         zoomOnScroll={true}
+        onContextMenu={handleContextMenu}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         <Background color={isDark ? '#333' : '#ccc'} gap={20} size={1} />
 
@@ -497,6 +567,16 @@ function FlowCanvasInner() {
                 isDark={isDark}
                 isActive={currentLayout === 'compact'}
               />
+
+              {/* Spacing Controls */}
+              <div className="mt-1">
+                <SpacingControls
+                  spacing={spacing}
+                  onChange={setSpacing}
+                  onApply={handleApplySpacing}
+                  isDark={isDark}
+                />
+              </div>
 
               <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
 
@@ -758,6 +838,9 @@ function FlowCanvasInner() {
           isOpen={keyboardShortcuts.isOpen}
           onClose={keyboardShortcuts.close}
         />
+
+        {/* Context Menu */}
+        <ContextMenu />
       </ReactFlow>
     </div>
   );

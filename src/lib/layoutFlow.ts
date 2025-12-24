@@ -4,9 +4,29 @@ import { Node } from '@xyflow/react';
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 80;
-const GROUP_PADDING = 40;
+const GROUP_PADDING = 60;
+const GROUP_SPACING = 80;
+const GROUP_LABEL_HEIGHT = 40;
 
 export type LayoutDirection = 'TB' | 'LR' | 'compact';
+
+export interface LayoutSpacing {
+  nodeSpacing: number;  // Space between sibling nodes (1-5, default 3)
+  rankSpacing: number;  // Space between levels/ranks (1-5, default 3)
+}
+
+export const DEFAULT_SPACING: LayoutSpacing = {
+  nodeSpacing: 3,
+  rankSpacing: 3,
+};
+
+// Convert 1-5 scale to actual pixel values
+function getSpacingValues(spacing: LayoutSpacing): { nodesep: number; ranksep: number } {
+  // Scale: 1 = tight (40px), 3 = normal (80px), 5 = spacious (160px)
+  const nodeBase = 40 + (spacing.nodeSpacing - 1) * 30;  // 40, 70, 100, 130, 160
+  const rankBase = 50 + (spacing.rankSpacing - 1) * 37;  // 50, 87, 124, 161, 198
+  return { nodesep: nodeBase, ranksep: rankBase };
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyNode = Node<any, string>;
@@ -14,7 +34,8 @@ type AnyNode = Node<any, string>;
 export function layoutFlow(
   nodes: AnyNode[],
   edges: ProcessEdge[],
-  direction: LayoutDirection = 'TB'
+  direction: LayoutDirection = 'TB',
+  spacing: LayoutSpacing = DEFAULT_SPACING
 ): AnyNode[] {
   if (nodes.length === 0) return nodes;
 
@@ -24,28 +45,173 @@ export function layoutFlow(
 
   // If there are groups, use group-aware layout
   if (groupNodes.length > 0) {
-    return layoutWithGroups(processNodes, groupNodes, edges, direction);
+    return layoutWithGroups(processNodes, groupNodes, edges, direction, spacing);
   }
 
   // Use compact n8n-style layout
   if (direction === 'compact') {
-    return layoutCompact(nodes, edges);
+    return layoutCompact(nodes, edges, spacing);
   }
 
   // Use tree-style layout for TB
   if (direction === 'TB') {
-    return layoutTree(nodes, edges);
+    return layoutTree(nodes, edges, spacing);
   }
 
   // LR layout using Dagre
+  return layoutLR(nodes, edges, spacing);
+}
+
+/**
+ * Layout nodes with group support
+ * Groups are positioned sequentially to prevent overlaps
+ */
+function layoutWithGroups(
+  processNodes: AnyNode[],
+  groupNodes: AnyNode[],
+  edges: ProcessEdge[],
+  direction: LayoutDirection,
+  spacing: LayoutSpacing
+): AnyNode[] {
+  // Build map of group id to original child nodes
+  const groupChildMap = new Map<string, AnyNode[]>();
+  const standaloneNodes: AnyNode[] = [];
+
+  groupNodes.forEach(g => groupChildMap.set(g.id, []));
+
+  // Separate nodes by group membership
+  processNodes.forEach((node) => {
+    if (node.parentId && groupChildMap.has(node.parentId)) {
+      groupChildMap.get(node.parentId)!.push(node);
+    } else {
+      standaloneNodes.push(node);
+    }
+  });
+
+  // Layout each group's children independently
+  const groupLayouts = new Map<string, { nodes: AnyNode[], bounds: { width: number, height: number } }>();
+
+  groupNodes.forEach(group => {
+    const children = groupChildMap.get(group.id) || [];
+    if (children.length === 0) {
+      groupLayouts.set(group.id, { nodes: [], bounds: { width: 300, height: 200 } });
+      return;
+    }
+
+    // Get edges that are internal to this group
+    const childIds = new Set(children.map(c => c.id));
+    const internalEdges = edges.filter(e => childIds.has(e.source) && childIds.has(e.target));
+
+    // Layout children with spacing
+    const layoutedChildren = layoutGroupChildren(children, internalEdges, direction, spacing);
+
+    // Calculate bounds
+    const minX = Math.min(...layoutedChildren.map(c => c.position.x));
+    const minY = Math.min(...layoutedChildren.map(c => c.position.y));
+    const maxX = Math.max(...layoutedChildren.map(c => c.position.x + NODE_WIDTH));
+    const maxY = Math.max(...layoutedChildren.map(c => c.position.y + NODE_HEIGHT));
+
+    // Normalize positions to start from (GROUP_PADDING, GROUP_PADDING + label height)
+    const normalizedChildren = layoutedChildren.map(node => ({
+      ...node,
+      position: {
+        x: node.position.x - minX + GROUP_PADDING,
+        y: node.position.y - minY + GROUP_PADDING + GROUP_LABEL_HEIGHT,
+      },
+    }));
+
+    const width = maxX - minX + GROUP_PADDING * 2;
+    const height = maxY - minY + GROUP_PADDING * 2 + GROUP_LABEL_HEIGHT;
+
+    groupLayouts.set(group.id, {
+      nodes: normalizedChildren,
+      bounds: { width, height }
+    });
+  });
+
+  // Position groups sequentially (vertically stacked with spacing)
+  let currentY = 50; // Start position
+  const positionedGroups: AnyNode[] = [];
+  const allChildNodes: AnyNode[] = [];
+
+  groupNodes.forEach(group => {
+    const layout = groupLayouts.get(group.id)!;
+
+    const groupNode: AnyNode = {
+      ...group,
+      position: { x: 50, y: currentY },
+      style: {
+        ...group.style,
+        width: Math.max(layout.bounds.width, 350), // Minimum width
+        height: Math.max(layout.bounds.height, 150), // Minimum height
+      },
+    };
+    positionedGroups.push(groupNode);
+
+    // Add children with parent reference
+    layout.nodes.forEach(childNode => {
+      allChildNodes.push({
+        ...childNode,
+        parentId: group.id,
+        extent: 'parent' as const,
+      });
+    });
+
+    currentY += layout.bounds.height + GROUP_SPACING;
+  });
+
+  // Layout and position standalone nodes (not in any group)
+  if (standaloneNodes.length > 0) {
+    const standaloneEdges = edges.filter(e =>
+      standaloneNodes.some(n => n.id === e.source) ||
+      standaloneNodes.some(n => n.id === e.target)
+    );
+
+    const layoutedStandalone = layoutGroupChildren(standaloneNodes, standaloneEdges, direction, spacing);
+
+    // Position standalone nodes below all groups
+    layoutedStandalone.forEach(node => {
+      allChildNodes.push({
+        ...node,
+        position: {
+          x: node.position.x + 50,
+          y: node.position.y + currentY,
+        },
+      });
+    });
+  }
+
+  // Return groups first, then process nodes (React Flow requires parents before children)
+  return [...positionedGroups, ...allChildNodes];
+}
+
+/**
+ * Layout children within a group with configurable spacing
+ */
+function layoutGroupChildren(
+  nodes: AnyNode[],
+  edges: ProcessEdge[],
+  direction: LayoutDirection,
+  spacing: LayoutSpacing
+): AnyNode[] {
+  if (nodes.length === 0) return [];
+  if (nodes.length === 1) {
+    return [{
+      ...nodes[0],
+      position: { x: 0, y: 0 },
+    }];
+  }
+
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  const { nodesep, ranksep } = getSpacingValues(spacing);
+  const isHorizontal = direction === 'LR' || direction === 'compact';
 
   g.setGraph({
-    rankdir: 'LR',
-    nodesep: 40,
-    ranksep: 60,
-    marginx: 50,
-    marginy: 50,
+    rankdir: isHorizontal ? 'LR' : 'TB',
+    nodesep,
+    ranksep,
+    marginx: 20,
+    marginy: 20,
   });
 
   nodes.forEach((node) => {
@@ -53,122 +219,33 @@ export function layoutFlow(
   });
 
   edges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
+    if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
+      g.setEdge(edge.source, edge.target);
+    }
   });
 
   Dagre.layout(g);
 
   return nodes.map((node) => {
-    const position = g.node(node.id);
-    const x = position.x - NODE_WIDTH / 2;
-    const y = position.y - NODE_HEIGHT / 2;
-
+    const pos = g.node(node.id);
     return {
       ...node,
-      position: { x, y },
+      position: {
+        x: pos.x - NODE_WIDTH / 2,
+        y: pos.y - NODE_HEIGHT / 2,
+      },
     };
   });
 }
 
-/**
- * Layout nodes with group support
- * Groups are positioned to contain their child nodes
- */
-function layoutWithGroups(
-  processNodes: AnyNode[],
-  groupNodes: AnyNode[],
-  edges: ProcessEdge[],
-  direction: LayoutDirection
-): AnyNode[] {
-  // First, layout all process nodes without parent constraints
-  const nodesWithoutParent = processNodes.map(n => ({
-    ...n,
-    parentId: undefined,
-    extent: undefined,
-  }));
-
-  // Layout process nodes
-  let layoutedProcessNodes: AnyNode[];
-  if (direction === 'compact') {
-    layoutedProcessNodes = layoutCompact(nodesWithoutParent, edges);
-  } else if (direction === 'LR') {
-    layoutedProcessNodes = layoutLR(nodesWithoutParent, edges);
-  } else {
-    layoutedProcessNodes = layoutTree(nodesWithoutParent, edges);
-  }
-
-  // Build map of group id to child nodes
-  const groupChildMap = new Map<string, AnyNode[]>();
-  groupNodes.forEach(g => groupChildMap.set(g.id, []));
-
-  // Find children for each group
-  processNodes.forEach((originalNode, index) => {
-    if (originalNode.parentId && groupChildMap.has(originalNode.parentId)) {
-      groupChildMap.get(originalNode.parentId)!.push(layoutedProcessNodes[index]);
-    }
-  });
-
-  // Position groups to encompass their children
-  const positionedGroups: AnyNode[] = groupNodes.map(group => {
-    const children = groupChildMap.get(group.id) || [];
-
-    if (children.length === 0) {
-      return {
-        ...group,
-        position: { x: 0, y: 0 },
-        style: { ...group.style, width: 300, height: 200 },
-      };
-    }
-
-    // Calculate bounding box of children
-    const minX = Math.min(...children.map(c => c.position.x));
-    const minY = Math.min(...children.map(c => c.position.y));
-    const maxX = Math.max(...children.map(c => c.position.x + NODE_WIDTH));
-    const maxY = Math.max(...children.map(c => c.position.y + NODE_HEIGHT));
-
-    const groupX = minX - GROUP_PADDING;
-    const groupY = minY - GROUP_PADDING - 20; // Extra space for label
-    const groupWidth = maxX - minX + GROUP_PADDING * 2;
-    const groupHeight = maxY - minY + GROUP_PADDING * 2 + 20;
-
-    return {
-      ...group,
-      position: { x: groupX, y: groupY },
-      style: { ...group.style, width: groupWidth, height: groupHeight },
-    };
-  });
-
-  // Adjust child positions to be relative to parent group
-  const finalProcessNodes = layoutedProcessNodes.map((node, index) => {
-    const originalNode = processNodes[index];
-    if (originalNode.parentId) {
-      const parentGroup = positionedGroups.find(g => g.id === originalNode.parentId);
-      if (parentGroup) {
-        return {
-          ...node,
-          parentId: originalNode.parentId,
-          extent: 'parent' as const,
-          position: {
-            x: node.position.x - parentGroup.position.x,
-            y: node.position.y - parentGroup.position.y,
-          },
-        };
-      }
-    }
-    return node;
-  });
-
-  // Return groups first, then process nodes (React Flow requires parents before children)
-  return [...positionedGroups, ...finalProcessNodes];
-}
-
-function layoutLR(nodes: AnyNode[], edges: ProcessEdge[]): AnyNode[] {
+function layoutLR(nodes: AnyNode[], edges: ProcessEdge[], spacing: LayoutSpacing): AnyNode[] {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  const { nodesep, ranksep } = getSpacingValues(spacing);
 
   g.setGraph({
     rankdir: 'LR',
-    nodesep: 40,
-    ranksep: 60,
+    nodesep,
+    ranksep,
     marginx: 50,
     marginy: 50,
   });
@@ -198,19 +275,21 @@ function layoutLR(nodes: AnyNode[], edges: ProcessEdge[]): AnyNode[] {
 // Tree-style vertical layout - clean process diagram
 function layoutTree(
   nodes: AnyNode[],
-  edges: ProcessEdge[]
+  edges: ProcessEdge[],
+  spacing: LayoutSpacing
 ): AnyNode[] {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  const { nodesep, ranksep } = getSpacingValues(spacing);
 
   // TB layout with centered alignment for tree look
   g.setGraph({
     rankdir: 'TB',
-    nodesep: 40,       // Horizontal space between siblings
-    ranksep: 60,       // Vertical space between levels
-    marginx: 40,
-    marginy: 40,
-    align: 'UL',       // Align to reduce sprawl
-    ranker: 'tight-tree', // Use tight tree ranking for cleaner layout
+    nodesep,
+    ranksep,
+    marginx: 50,
+    marginy: 50,
+    align: 'UL',
+    ranker: 'tight-tree',
   });
 
   nodes.forEach((node) => {
@@ -235,26 +314,28 @@ function layoutTree(
   });
 }
 
-// n8n-style compact layout using Dagre LR with tight spacing
+// n8n-style compact layout using Dagre LR with configurable spacing
 function layoutCompact(
   nodes: AnyNode[],
-  edges: ProcessEdge[]
+  edges: ProcessEdge[],
+  spacing: LayoutSpacing
 ): AnyNode[] {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  const { nodesep, ranksep } = getSpacingValues(spacing);
 
-  // Use LR layout with tight n8n-style spacing
+  // Use LR layout with configurable spacing
   g.setGraph({
     rankdir: 'LR',
-    nodesep: 30,      // Tight vertical spacing between parallel nodes
-    ranksep: 50,      // Tight horizontal spacing between steps
+    nodesep,
+    ranksep,
     marginx: 40,
     marginy: 40,
     align: 'UL',
   });
 
-  // Use smaller node dimensions for compact view
-  const COMPACT_WIDTH = 160;
-  const COMPACT_HEIGHT = 70;
+  // Use standard node dimensions
+  const COMPACT_WIDTH = NODE_WIDTH;
+  const COMPACT_HEIGHT = NODE_HEIGHT;
 
   nodes.forEach((node) => {
     g.setNode(node.id, { width: COMPACT_WIDTH, height: COMPACT_HEIGHT });
