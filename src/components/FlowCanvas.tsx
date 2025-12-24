@@ -36,6 +36,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { flowToMermaid, flowToMarkdown, exportToPDF, downloadTextFile, copyToClipboard } from '@/lib/exportFlow';
+import { shareDiagram, isSharingAvailable } from '@/lib/shareService';
 
 import ProcessNode from './nodes/ProcessNode';
 import GroupNode from './nodes/GroupNode';
@@ -345,12 +346,25 @@ function FlowCanvasInner() {
   }, []);
 
   const handleShare = useCallback(async () => {
-    // Create shareable data by encoding flow state
-    const flowData = { nodes, edges };
-    const encoded = btoa(encodeURIComponent(JSON.stringify(flowData)));
-    const shareUrl = `${window.location.origin}${window.location.pathname}?flow=${encoded}`;
-
     try {
+      // Try Supabase short links first
+      if (isSharingAvailable()) {
+        const mermaidCode = flowToMermaid(nodes, edges);
+        const result = await shareDiagram(nodes, edges, 'Shared Diagram', mermaidCode);
+
+        if (result.success && result.url) {
+          await navigator.clipboard.writeText(result.url);
+          setLinkCopied(true);
+          setTimeout(() => setLinkCopied(false), 2000);
+          return;
+        }
+      }
+
+      // Fallback to long URL encoding
+      const flowData = { nodes, edges };
+      const encoded = btoa(encodeURIComponent(JSON.stringify(flowData)));
+      const shareUrl = `${window.location.origin}${window.location.pathname}?flow=${encoded}`;
+
       await navigator.clipboard.writeText(shareUrl);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
