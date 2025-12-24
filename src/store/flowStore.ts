@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ProcessEdge } from '@/types/flow';
+import { ProcessEdge, ProcessNodeData, GroupColor } from '@/types/flow';
 import {
   applyNodeChanges,
   applyEdgeChanges,
@@ -36,8 +36,11 @@ interface FlowState {
   onConnect: (connection: Connection) => void;
   addGroup: (group: AnyNode) => void;
   updateNodeLabel: (nodeId: string, label: string) => void;
+  updateNodeData: (nodeId: string, data: Partial<ProcessNodeData>) => void;
   updateGroupLabel: (groupId: string, label: string) => void;
+  updateGroupColor: (groupId: string, color: GroupColor) => void;
   updateEdgeLabel: (edgeId: string, label: string) => void;
+  deleteEdge: (edgeId: string) => void;
   deleteSelectedNodes: () => void;
   setIsGenerating: (isGenerating: boolean) => void;
   setPrompt: (prompt: string) => void;
@@ -219,12 +222,34 @@ export const useFlowStore = create<FlowState>()(
         });
       },
 
+      updateNodeData: (nodeId, newData) => {
+        get().saveToHistory();
+        set({
+          nodes: get().nodes.map((node) =>
+            node.id === nodeId
+              ? { ...node, data: { ...node.data, ...newData } }
+              : node
+          ),
+        });
+      },
+
       updateGroupLabel: (groupId, label) => {
         get().saveToHistory();
         set({
           nodes: get().nodes.map((node) =>
             node.id === groupId
               ? { ...node, data: { ...node.data, label } }
+              : node
+          ),
+        });
+      },
+
+      updateGroupColor: (groupId, color) => {
+        get().saveToHistory();
+        set({
+          nodes: get().nodes.map((node) =>
+            node.id === groupId
+              ? { ...node, data: { ...node.data, color } }
               : node
           ),
         });
@@ -238,6 +263,13 @@ export const useFlowStore = create<FlowState>()(
               ? { ...edge, data: { ...edge.data, label } }
               : edge
           ),
+        });
+      },
+
+      deleteEdge: (edgeId) => {
+        get().saveToHistory();
+        set({
+          edges: get().edges.filter((edge) => edge.id !== edgeId),
         });
       },
 

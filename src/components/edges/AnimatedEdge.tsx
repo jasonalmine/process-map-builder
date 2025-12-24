@@ -8,7 +8,7 @@ import {
 } from '@xyflow/react';
 import { useThemeStore } from '@/store/themeStore';
 import { useFlowStore } from '@/store/flowStore';
-import { Pencil } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 
 interface AnimatedEdgeData {
   label?: string;
@@ -32,6 +32,7 @@ function AnimatedEdgeComponent({
   const edgeData = data as AnimatedEdgeData | undefined;
   const [editValue, setEditValue] = useState(edgeData?.label || '');
   const updateEdgeLabel = useFlowStore((state) => state.updateEdgeLabel);
+  const deleteEdge = useFlowStore((state) => state.deleteEdge);
 
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
@@ -95,6 +96,10 @@ function AnimatedEdgeComponent({
     setIsEditing(true);
   }, [edgeData?.label]);
 
+  const handleDelete = useCallback(() => {
+    deleteEdge(id);
+  }, [id, deleteEdge]);
+
   return (
     <>
       {/* Main path */}
@@ -139,28 +144,56 @@ function AnimatedEdgeComponent({
               }`}
             />
           ) : edgeData?.label ? (
-            <div
-              onClick={handleStartEdit}
-              className={`group flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium shadow-md border cursor-pointer transition-colors ${
-                isDark
-                  ? 'bg-gray-800 text-gray-300 border-gray-700 hover:border-gray-600'
-                  : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              {edgeData.label}
-              <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+            <div className="flex items-center gap-1">
+              <div
+                onClick={handleStartEdit}
+                className={`group flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium shadow-md border cursor-pointer transition-colors ${
+                  isDark
+                    ? 'bg-gray-800 text-gray-300 border-gray-700 hover:border-gray-600'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                {edgeData.label}
+                <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+              </div>
+              {isHovered && (
+                <button
+                  onClick={handleDelete}
+                  className={`p-1 rounded-md shadow-md border transition-all ${
+                    isDark
+                      ? 'bg-red-900/80 text-red-400 border-red-800 hover:bg-red-900'
+                      : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'
+                  }`}
+                  title="Delete connection"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           ) : isHovered ? (
-            <button
-              onClick={handleStartEdit}
-              className={`px-2 py-1 rounded-md text-xs font-medium shadow-md border transition-all ${
-                isDark
-                  ? 'bg-gray-800/80 text-gray-400 border-gray-700 hover:bg-gray-800'
-                  : 'bg-white/80 text-gray-400 border-gray-200 hover:bg-white'
-              }`}
-            >
-              + Label
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleStartEdit}
+                className={`px-2 py-1 rounded-md text-xs font-medium shadow-md border transition-all ${
+                  isDark
+                    ? 'bg-gray-800/80 text-gray-400 border-gray-700 hover:bg-gray-800'
+                    : 'bg-white/80 text-gray-400 border-gray-200 hover:bg-white'
+                }`}
+              >
+                + Label
+              </button>
+              <button
+                onClick={handleDelete}
+                className={`p-1 rounded-md shadow-md border transition-all ${
+                  isDark
+                    ? 'bg-red-900/80 text-red-400 border-red-800 hover:bg-red-900'
+                    : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'
+                }`}
+                title="Delete connection"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
           ) : null}
         </div>
       </EdgeLabelRenderer>

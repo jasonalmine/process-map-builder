@@ -17,6 +17,8 @@ import { toPng, toSvg } from 'html-to-image';
 import {
   Image,
   FileCode,
+  FileText,
+  FileDown,
   ZoomIn,
   ZoomOut,
   Maximize,
@@ -27,16 +29,29 @@ import {
   Undo2,
   Redo2,
   Trash2,
+  Share2,
+  Check,
+  Keyboard,
+  ChevronDown,
+  Copy,
 } from 'lucide-react';
+import { flowToMermaid, flowToMarkdown, exportToPDF, downloadTextFile, copyToClipboard } from '@/lib/exportFlow';
 
 import ProcessNode from './nodes/ProcessNode';
 import GroupNode from './nodes/GroupNode';
 import AnimatedEdge from './edges/AnimatedEdge';
+import NodePalette from './NodePalette';
+import NodeDetailsPanel from './NodeDetailsPanel';
+import DraggablePanel from './DraggablePanel';
+import { KeyboardShortcutsModal, useKeyboardShortcuts } from './KeyboardShortcuts';
 import { useFlowStore } from '@/store/flowStore';
-import { useThemeStore } from '@/store/themeStore';
+import { useThemeStore, COLOR_THEMES, getThemeConfig } from '@/store/themeStore';
+import { useViewModeStore } from '@/store/viewModeStore';
 import { layoutFlow, LayoutDirection } from '@/lib/layoutFlow';
+import { ProcessNodeData } from '@/types/flow';
+import { Node } from '@xyflow/react';
 
-// Control button with tooltip label on hover
+// Control button with visible label
 function ControlButton({
   onClick,
   icon,
@@ -53,33 +68,22 @@ function ControlButton({
   disabled?: boolean;
 }) {
   return (
-    <div className="relative group">
-      <button
-        onClick={onClick}
-        disabled={disabled}
-        className={`p-2 rounded-lg transition-colors ${
-          disabled
-            ? 'opacity-40 cursor-not-allowed'
-            : isActive
-            ? 'bg-purple-600 text-white'
-            : isDark
-            ? 'hover:bg-gray-700 text-white'
-            : 'hover:bg-gray-200 text-gray-700'
-        }`}
-      >
-        {icon}
-      </button>
-      {/* Tooltip */}
-      <div
-        className={`absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs font-medium rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 ${
-          isDark
-            ? 'bg-gray-900 text-white border border-gray-700'
-            : 'bg-white text-gray-900 border border-gray-200 shadow-md'
-        }`}
-      >
-        {label}
-      </div>
-    </div>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors w-full text-left ${
+        disabled
+          ? 'opacity-40 cursor-not-allowed'
+          : isActive
+          ? 'bg-purple-600 text-white'
+          : isDark
+          ? 'hover:bg-gray-700 text-white'
+          : 'hover:bg-gray-200 text-gray-700'
+      }`}
+    >
+      {icon}
+      <span className="text-xs font-medium">{label}</span>
+    </button>
   );
 }
 
@@ -92,6 +96,7 @@ function FlowCanvasInner() {
     onEdgesChange,
     onConnect,
     setNodes,
+    setEdges,
     addGroup,
     deleteSelectedNodes,
     clearFlow,
@@ -109,8 +114,45 @@ function FlowCanvasInner() {
     }
   }, [fitView, getNodes]);
   const [currentLayout, setCurrentLayout] = useState<LayoutDirection>('TB');
+  const [selectedNode, setSelectedNode] = useState<Node<ProcessNodeData> | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportCopied, setExportCopied] = useState<string | null>(null);
+  const keyboardShortcuts = useKeyboardShortcuts();
   const theme = useThemeStore((state) => state.theme);
+  const colorTheme = useThemeStore((state) => state.colorTheme);
+  const setColorTheme = useThemeStore((state) => state.setColorTheme);
   const isDark = theme === 'dark';
+  const [showThemePicker, setShowThemePicker] = useState(false);
+  const { isViewMode, setViewMode, exitViewMode } = useViewModeStore();
+
+  // Track selected node
+  useEffect(() => {
+    const selected = nodes.find(
+      (n) => n.selected && n.type === 'processNode'
+    ) as Node<ProcessNodeData> | undefined;
+    setSelectedNode(selected || null);
+  }, [nodes]);
+
+  // Load shared flow from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const flowParam = params.get('flow');
+    if (flowParam) {
+      try {
+        const decoded = JSON.parse(decodeURIComponent(atob(flowParam)));
+        if (decoded.nodes && decoded.edges) {
+          setNodes(decoded.nodes);
+          setEdges(decoded.edges);
+          // Enable view mode for shared links
+          setViewMode(true);
+          setTimeout(() => fitView({ padding: 0.2 }), 100);
+        }
+      } catch (error) {
+        console.error('Failed to load shared flow:', error);
+      }
+    }
+  }, [setNodes, setEdges, fitView, setViewMode]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -189,6 +231,7 @@ function FlowCanvasInner() {
         x: -viewport.x / viewport.zoom + 100,
         y: -viewport.y / viewport.zoom + 100,
       },
+      // Don't set color - group will use global theme by default
       data: { label: 'New Group' },
       style: { width: 400, height: 250 },
     });
@@ -196,42 +239,134 @@ function FlowCanvasInner() {
 
   const downloadImage = useCallback(
     async (format: 'png' | 'svg') => {
-      const element = document.querySelector('.react-flow') as HTMLElement;
-      if (!element) return;
+      // Get the viewport element which contains only the nodes and edges
+      const viewport = document.querySelector('.react-flow__viewport') as HTMLElement;
+      if (!viewport) return;
 
       const bgColor = isDark ? '#111111' : '#f5f5f5';
 
+      // Get the bounding box of all nodes to calculate the export area
+      const nodeElements = document.querySelectorAll('.react-flow__node');
+      if (nodeElements.length === 0) return;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      nodeElements.forEach((node) => {
+        const rect = node.getBoundingClientRect();
+        const transform = window.getComputedStyle(node).transform;
+        minX = Math.min(minX, rect.left);
+        minY = Math.min(minY, rect.top);
+        maxX = Math.max(maxX, rect.right);
+        maxY = Math.max(maxY, rect.bottom);
+      });
+
+      // Add padding around the flowchart
+      const padding = 40;
+      const width = maxX - minX + padding * 2;
+      const height = maxY - minY + padding * 2;
+
       try {
+        // Hide UI elements temporarily
+        const controls = document.querySelectorAll('.react-flow__panel, .react-flow__controls, .react-flow__minimap, .react-flow__background');
+        controls.forEach((el) => {
+          (el as HTMLElement).style.visibility = 'hidden';
+        });
+
         const dataUrl =
           format === 'png'
-            ? await toPng(element, {
+            ? await toPng(viewport, {
                 backgroundColor: bgColor,
                 quality: 1,
-                pixelRatio: 2,
+                pixelRatio: 3, // Higher resolution
+                width: width,
+                height: height,
+                style: {
+                  transform: `translate(${-minX + padding}px, ${-minY + padding}px)`,
+                },
               })
-            : await toSvg(element, {
+            : await toSvg(viewport, {
                 backgroundColor: bgColor,
+                width: width,
+                height: height,
+                style: {
+                  transform: `translate(${-minX + padding}px, ${-minY + padding}px)`,
+                },
               });
 
+        // Restore UI elements
+        controls.forEach((el) => {
+          (el as HTMLElement).style.visibility = 'visible';
+        });
+
         const link = document.createElement('a');
-        link.download = `process-map.${format}`;
+        link.download = `flowchart.${format}`;
         link.href = dataUrl;
         link.click();
       } catch (error) {
         console.error('Failed to export:', error);
+        // Restore UI elements on error
+        const controls = document.querySelectorAll('.react-flow__panel, .react-flow__controls, .react-flow__minimap, .react-flow__background');
+        controls.forEach((el) => {
+          (el as HTMLElement).style.visibility = 'visible';
+        });
       }
+      setShowExportMenu(false);
     },
     [isDark]
   );
+
+  const handleExportMermaid = useCallback(async (action: 'copy' | 'download') => {
+    const mermaidCode = flowToMermaid(nodes, edges);
+    if (action === 'copy') {
+      await copyToClipboard(mermaidCode);
+      setExportCopied('mermaid');
+      setTimeout(() => setExportCopied(null), 2000);
+    } else {
+      downloadTextFile(mermaidCode, 'flowchart.mmd', 'text/plain');
+    }
+    setShowExportMenu(false);
+  }, [nodes, edges]);
+
+  const handleExportMarkdown = useCallback(async () => {
+    const markdown = flowToMarkdown(nodes, edges, 'Flowchart');
+    await copyToClipboard(markdown);
+    setExportCopied('markdown');
+    setTimeout(() => setExportCopied(null), 2000);
+    setShowExportMenu(false);
+  }, [nodes, edges]);
+
+  const handleExportPDF = useCallback(async () => {
+    try {
+      await exportToPDF('.react-flow', 'flowchart.pdf');
+    } catch (error) {
+      console.error('Failed to export PDF:', error);
+    }
+    setShowExportMenu(false);
+  }, []);
+
+  const handleShare = useCallback(async () => {
+    // Create shareable data by encoding flow state
+    const flowData = { nodes, edges };
+    const encoded = btoa(encodeURIComponent(JSON.stringify(flowData)));
+    const shareUrl = `${window.location.origin}${window.location.pathname}?flow=${encoded}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy link:', error);
+    }
+  }, [nodes, edges]);
 
   return (
     <div ref={reactFlowWrapper} className="w-full h-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onNodesChange={isViewMode ? undefined : onNodesChange}
+        onEdgesChange={isViewMode ? undefined : onEdgesChange}
+        onConnect={isViewMode ? undefined : onConnect}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{
@@ -244,116 +379,152 @@ function FlowCanvasInner() {
         minZoom={0.1}
         maxZoom={2}
         className={isDark ? 'bg-gray-950' : 'bg-gray-100'}
+        nodesDraggable={!isViewMode}
+        nodesConnectable={!isViewMode}
+        elementsSelectable={!isViewMode}
+        panOnDrag={true}
+        zoomOnScroll={true}
       >
         <Background color={isDark ? '#333' : '#ccc'} gap={20} size={1} />
 
-        {/* Left Center Controls Panel */}
-        <Panel position="top-left" className="!top-1/2 !-translate-y-1/2 !left-4">
-          <div
-            className={`flex flex-col gap-1 backdrop-blur-xl border rounded-xl p-1.5 shadow-lg ${
-              isDark
-                ? 'bg-gray-800/90 border-gray-700'
-                : 'bg-white/90 border-gray-300'
-            }`}
+        {/* View Mode Banner */}
+        {isViewMode && (
+          <Panel position="top-left" className="m-4">
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl backdrop-blur-xl border shadow-lg ${
+              isDark ? 'bg-gray-900/90 border-gray-700' : 'bg-white/90 border-gray-200'
+            }`}>
+              <div className={`w-2 h-2 rounded-full bg-green-500 animate-pulse`} />
+              <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                View Mode
+              </span>
+              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                This is a shared flowchart
+              </span>
+              <button
+                onClick={() => {
+                  exitViewMode();
+                  window.history.replaceState({}, '', window.location.pathname);
+                }}
+                className="ml-2 px-3 py-1 text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+              >
+                Edit a Copy
+              </button>
+            </div>
+          </Panel>
+        )}
+
+        {/* Left Controls Panel - Draggable (hidden in view mode) */}
+        {!isViewMode && (
+          <DraggablePanel
+            title="Tools"
+            defaultPosition={{ x: 16, y: 100 }}
+            storageKey="tools-panel"
           >
-            {/* Undo/Redo controls */}
-            <ControlButton
-              onClick={undo}
-              icon={<Undo2 className="w-4 h-4" />}
-              label="Undo (Ctrl+Z)"
-              isDark={isDark}
-              disabled={!canUndo()}
-            />
-            <ControlButton
-              onClick={redo}
-              icon={<Redo2 className="w-4 h-4" />}
-              label="Redo (Ctrl+Shift+Z)"
-              isDark={isDark}
-              disabled={!canRedo()}
-            />
+            <div className="flex flex-col gap-1">
+              {/* Undo/Redo controls */}
+              <ControlButton
+                onClick={undo}
+                icon={<Undo2 className="w-4 h-4" />}
+                label="Undo"
+                isDark={isDark}
+                disabled={!canUndo()}
+              />
+              <ControlButton
+                onClick={redo}
+                icon={<Redo2 className="w-4 h-4" />}
+                label="Redo"
+                isDark={isDark}
+                disabled={!canRedo()}
+              />
 
-            <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
+              <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
 
-            {/* Zoom controls */}
-            <ControlButton
-              onClick={() => zoomIn()}
-              icon={<ZoomIn className="w-4 h-4" />}
-              label="Zoom In"
-              isDark={isDark}
-            />
-            <ControlButton
-              onClick={() => zoomOut()}
-              icon={<ZoomOut className="w-4 h-4" />}
-              label="Zoom Out"
-              isDark={isDark}
-            />
-            <ControlButton
-              onClick={handleFitView}
-              icon={<Maximize className="w-4 h-4" />}
-              label="Fit View"
-              isDark={isDark}
-            />
+              {/* Zoom controls */}
+              <ControlButton
+                onClick={() => zoomIn()}
+                icon={<ZoomIn className="w-4 h-4" />}
+                label="Zoom In"
+                isDark={isDark}
+              />
+              <ControlButton
+                onClick={() => zoomOut()}
+                icon={<ZoomOut className="w-4 h-4" />}
+                label="Zoom Out"
+                isDark={isDark}
+              />
+              <ControlButton
+                onClick={handleFitView}
+                icon={<Maximize className="w-4 h-4" />}
+                label="Fit View"
+                isDark={isDark}
+              />
 
-            <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
+              <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
 
-            {/* Layout options */}
-            <ControlButton
-              onClick={() => handleLayoutChange('TB')}
-              icon={<ArrowDown className="w-4 h-4" />}
-              label="Vertical"
-              isDark={isDark}
-              isActive={currentLayout === 'TB'}
-            />
-            <ControlButton
-              onClick={() => handleLayoutChange('LR')}
-              icon={<ArrowRight className="w-4 h-4" />}
-              label="Horizontal"
-              isDark={isDark}
-              isActive={currentLayout === 'LR'}
-            />
-            <ControlButton
-              onClick={() => handleLayoutChange('compact')}
-              icon={<LayoutGrid className="w-4 h-4" />}
-              label="Compact"
-              isDark={isDark}
-              isActive={currentLayout === 'compact'}
-            />
+              {/* Layout options */}
+              <ControlButton
+                onClick={() => handleLayoutChange('TB')}
+                icon={<ArrowDown className="w-4 h-4" />}
+                label="Vertical"
+                isDark={isDark}
+                isActive={currentLayout === 'TB'}
+              />
+              <ControlButton
+                onClick={() => handleLayoutChange('LR')}
+                icon={<ArrowRight className="w-4 h-4" />}
+                label="Horizontal"
+                isDark={isDark}
+                isActive={currentLayout === 'LR'}
+              />
+              <ControlButton
+                onClick={() => handleLayoutChange('compact')}
+                icon={<LayoutGrid className="w-4 h-4" />}
+                label="Compact"
+                isDark={isDark}
+                isActive={currentLayout === 'compact'}
+              />
 
-            <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
+              <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
 
-            {/* Add group */}
-            <ControlButton
-              onClick={handleAddGroup}
-              icon={<Square className="w-4 h-4" />}
-              label="Add Group"
-              isDark={isDark}
-            />
+              {/* Add group */}
+              <ControlButton
+                onClick={handleAddGroup}
+                icon={<Square className="w-4 h-4" />}
+                label="Add Group"
+                isDark={isDark}
+              />
 
-            <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
+              <div className={`h-px my-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
 
-            {/* Clear canvas */}
-            <ControlButton
-              onClick={clearFlow}
-              icon={<Trash2 className="w-4 h-4" />}
-              label="Clear Canvas"
-              isDark={isDark}
-              disabled={nodes.length === 0}
-            />
-          </div>
-        </Panel>
+              {/* Clear canvas */}
+              <ControlButton
+                onClick={clearFlow}
+                icon={<Trash2 className="w-4 h-4" />}
+                label="Clear Canvas"
+                isDark={isDark}
+                disabled={nodes.length === 0}
+              />
+            </div>
+          </DraggablePanel>
+        )}
+
+        {/* Node Palette - Draggable (hidden in view mode) */}
+        {!isViewMode && (
+          <DraggablePanel
+            title="Add Node"
+            defaultPosition={{ x: 16, y: 450 }}
+            storageKey="node-palette"
+          >
+            <NodePalette />
+          </DraggablePanel>
+        )}
 
         <MiniMap
           nodeColor={(node) => {
-            const colors: Record<string, string> = {
-              trigger: '#3b82f6',
-              action: '#10b981',
-              decision: '#f59e0b',
-              delay: '#8b5cf6',
-              outcome: '#22c55e',
-              integration: '#ec4899',
-            };
+            const themeConfig = getThemeConfig(colorTheme);
             const nodeType = (node.data as Record<string, unknown>)?.nodeType as string;
-            return colors[nodeType] || '#6b7280';
+            const nodeStyle = themeConfig.nodes[nodeType as keyof typeof themeConfig.nodes];
+            return nodeStyle?.minimapColor || '#6b7280';
           }}
           className={
             isDark
@@ -364,30 +535,215 @@ function FlowCanvasInner() {
         />
 
         {/* Export Panel */}
-        <Panel position="top-right" className="flex gap-2">
+        <Panel position="top-right" className="flex gap-2 items-center">
+          {/* Keyboard Shortcuts */}
           <button
-            onClick={() => downloadImage('png')}
+            onClick={keyboardShortcuts.open}
             className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
               isDark
                 ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700'
                 : 'bg-white hover:bg-gray-100 text-gray-700 border-gray-300'
             }`}
+            title="Keyboard shortcuts (?)"
           >
-            <Image className="w-4 h-4" />
-            PNG
+            <Keyboard className="w-4 h-4" />
           </button>
+
+          {/* Color Theme Picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowThemePicker(!showThemePicker)}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                isDark
+                  ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700'
+                  : 'bg-white hover:bg-gray-100 text-gray-700 border-gray-300'
+              }`}
+            >
+              <div className="flex -space-x-1">
+                {COLOR_THEMES.find(t => t.id === colorTheme)?.swatches.slice(0, 3).map((swatch, i) => (
+                  <div key={i} className={`w-3 h-3 rounded-full ${swatch} border border-white/50`} />
+                ))}
+              </div>
+              <span>Theme</span>
+            </button>
+
+            {showThemePicker && (
+              <div
+                className={`absolute right-0 top-full mt-2 p-3 rounded-xl shadow-xl border z-[100] min-w-[200px] ${
+                  isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                }`}
+              >
+                <div className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Color Theme
+                </div>
+                <div className="flex flex-col gap-1">
+                  {COLOR_THEMES.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setColorTheme(t.id);
+                        setShowThemePicker(false);
+                      }}
+                      className={`flex items-center gap-3 px-2 py-1.5 rounded-lg transition-all ${
+                        colorTheme === t.id
+                          ? isDark ? 'bg-purple-600/30 ring-1 ring-purple-500' : 'bg-purple-100 ring-1 ring-purple-400'
+                          : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      <div className="flex -space-x-1">
+                        {t.swatches.map((swatch, i) => (
+                          <div key={i} className={`w-4 h-4 rounded-full ${swatch} border border-white/50`} />
+                        ))}
+                      </div>
+                      <div className="text-left">
+                        <div className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {t.label}
+                        </div>
+                        <div className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {t.description}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Share Button */}
           <button
-            onClick={() => downloadImage('svg')}
+            onClick={handleShare}
+            disabled={nodes.length === 0}
             className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
-              isDark
-                ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700'
-                : 'bg-white hover:bg-gray-100 text-gray-700 border-gray-300'
+              nodes.length === 0
+                ? 'opacity-50 cursor-not-allowed'
+                : ''
+            } ${
+              linkCopied
+                ? 'bg-green-600 hover:bg-green-500 text-white border-green-600'
+                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white border-transparent'
             }`}
           >
-            <FileCode className="w-4 h-4" />
-            SVG
+            {linkCopied ? (
+              <>
+                <Check className="w-4 h-4" />
+                Copied!
+              </>
+            ) : (
+              <>
+                <Share2 className="w-4 h-4" />
+                Share
+              </>
+            )}
           </button>
+
+          {/* Export Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              disabled={nodes.length === 0}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                nodes.length === 0
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              } ${
+                isDark
+                  ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700'
+                  : 'bg-white hover:bg-gray-100 text-gray-700 border-gray-300'
+              }`}
+            >
+              <FileDown className="w-4 h-4" />
+              Export
+              <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showExportMenu && (
+              <div
+                className={`absolute right-0 top-full mt-2 py-2 rounded-xl shadow-xl border z-[100] min-w-[180px] ${
+                  isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                }`}
+              >
+                <div className={`px-3 py-1 text-xs font-medium uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Code
+                </div>
+                <button
+                  onClick={() => handleExportMermaid('copy')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                    isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <Copy className="w-4 h-4" />
+                  {exportCopied === 'mermaid' ? 'Copied!' : 'Copy Mermaid'}
+                </button>
+                <button
+                  onClick={() => handleExportMermaid('download')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                    isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <FileCode className="w-4 h-4" />
+                  Download .mmd
+                </button>
+                <button
+                  onClick={handleExportMarkdown}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                    isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  {exportCopied === 'markdown' ? 'Copied!' : 'Copy Markdown'}
+                </button>
+
+                <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
+
+                <div className={`px-3 py-1 text-xs font-medium uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Images
+                </div>
+                <button
+                  onClick={() => downloadImage('png')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                    isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <Image className="w-4 h-4" />
+                  Download PNG
+                </button>
+                <button
+                  onClick={() => downloadImage('svg')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                    isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <FileCode className="w-4 h-4" />
+                  Download SVG
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                    isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  Download PDF
+                </button>
+              </div>
+            )}
+          </div>
         </Panel>
+
+        {/* Node Details Panel (hidden in view mode) */}
+        {!isViewMode && (
+          <NodeDetailsPanel
+            selectedNode={selectedNode}
+            onClose={() => setSelectedNode(null)}
+          />
+        )}
+
+        {/* Keyboard Shortcuts Modal */}
+        <KeyboardShortcutsModal
+          isOpen={keyboardShortcuts.isOpen}
+          onClose={keyboardShortcuts.close}
+        />
       </ReactFlow>
     </div>
   );

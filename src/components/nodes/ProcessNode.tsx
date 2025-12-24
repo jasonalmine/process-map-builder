@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState } from 'react';
+import { memo, useState, useRef } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import {
@@ -11,56 +11,22 @@ import {
   CheckCircle2,
   Plug,
   Pencil,
+  Wrench,
 } from 'lucide-react';
 import { ProcessNodeData, NodeType } from '@/types/flow';
 import { useFlowStore } from '@/store/flowStore';
-import { useThemeStore } from '@/store/themeStore';
+import { useThemeStore, getThemeConfig } from '@/store/themeStore';
+import { getToolLogoUrl } from '@/data/tools';
 
-const nodeConfig: Record<
-  NodeType,
-  {
-    icon: typeof Zap;
-    gradient: string;
-    borderColor: string;
-    iconBg: string;
-  }
-> = {
-  trigger: {
-    icon: Zap,
-    gradient: 'from-blue-500/20 to-cyan-500/20',
-    borderColor: 'border-blue-500/50',
-    iconBg: 'bg-blue-500',
-  },
-  action: {
-    icon: Play,
-    gradient: 'from-emerald-500/20 to-teal-500/20',
-    borderColor: 'border-emerald-500/50',
-    iconBg: 'bg-emerald-500',
-  },
-  decision: {
-    icon: GitBranch,
-    gradient: 'from-amber-500/20 to-orange-500/20',
-    borderColor: 'border-amber-500/50',
-    iconBg: 'bg-amber-500',
-  },
-  delay: {
-    icon: Clock,
-    gradient: 'from-purple-500/20 to-violet-500/20',
-    borderColor: 'border-purple-500/50',
-    iconBg: 'bg-purple-500',
-  },
-  outcome: {
-    icon: CheckCircle2,
-    gradient: 'from-green-500/20 to-emerald-500/20',
-    borderColor: 'border-green-500/50',
-    iconBg: 'bg-green-500',
-  },
-  integration: {
-    icon: Plug,
-    gradient: 'from-pink-500/20 to-rose-500/20',
-    borderColor: 'border-pink-500/50',
-    iconBg: 'bg-pink-500',
-  },
+// Icon mapping for node types
+const nodeIcons: Record<NodeType, typeof Zap> = {
+  trigger: Zap,
+  action: Play,
+  decision: GitBranch,
+  delay: Clock,
+  outcome: CheckCircle2,
+  integration: Plug,
+  tool: Wrench,
 };
 
 type ProcessNodeType = Node<ProcessNodeData, 'processNode'>;
@@ -70,10 +36,17 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
   const [editValue, setEditValue] = useState(data.label);
   const updateNodeLabel = useFlowStore((state) => state.updateNodeLabel);
   const theme = useThemeStore((state) => state.theme);
+  const colorTheme = useThemeStore((state) => state.colorTheme);
   const isDark = theme === 'dark';
 
-  const config = nodeConfig[data.nodeType] || nodeConfig.action;
-  const Icon = config.icon;
+  // Track mouse movement to distinguish click from drag
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
+  const isDragging = useRef(false);
+
+  // Get theme-based node styling
+  const themeConfig = getThemeConfig(colorTheme);
+  const nodeStyle = themeConfig.nodes[data.nodeType] || themeConfig.nodes.action;
+  const Icon = nodeIcons[data.nodeType] || nodeIcons.action;
 
   const handleSave = () => {
     updateNodeLabel(id, editValue);
@@ -96,9 +69,9 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={`
         relative w-[220px] rounded-xl
-        bg-gradient-to-br ${config.gradient}
+        bg-gradient-to-br ${nodeStyle.gradient}
         backdrop-blur-xl
-        border ${config.borderColor}
+        border ${nodeStyle.borderColor}
         ${selected ? 'ring-2 ring-white/50 ring-offset-1 ring-offset-transparent' : ''}
         shadow-lg shadow-black/20
         transition-all duration-200
@@ -109,7 +82,7 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
       {/* Glow effect on selection */}
       {selected && (
         <div
-          className={`absolute inset-0 rounded-xl bg-gradient-to-br ${config.gradient} blur-xl opacity-50 -z-10`}
+          className={`absolute inset-0 rounded-xl bg-gradient-to-br ${nodeStyle.gradient} blur-xl opacity-50 -z-10`}
         />
       )}
 
@@ -132,12 +105,24 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
       <div className="p-2.5 flex items-start gap-2">
         <div
           className={`
-            flex-shrink-0 w-8 h-8 rounded-lg ${config.iconBg}
+            flex-shrink-0 w-8 h-8 rounded-lg ${data.nodeType === 'tool' && data.toolDomain ? 'bg-white' : nodeStyle.iconBg}
             flex items-center justify-center
-            shadow-md
+            shadow-md overflow-hidden
           `}
         >
-          <Icon className="w-4 h-4 text-white" />
+          {data.nodeType === 'tool' && data.toolDomain ? (
+            <img
+              src={getToolLogoUrl(data.toolDomain, 64)}
+              alt={data.label}
+              className="w-6 h-6 object-contain"
+              onError={(e) => {
+                // Fallback to icon if logo fails to load
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+          ) : null}
+          <Icon className={`w-4 h-4 text-white ${data.nodeType === 'tool' && data.toolDomain ? 'hidden' : ''}`} />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -159,7 +144,26 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
                 {data.label}
               </h3>
               <button
-                onClick={() => setIsEditing(true)}
+                onMouseDown={(e) => {
+                  mouseDownPos.current = { x: e.clientX, y: e.clientY };
+                  isDragging.current = false;
+                }}
+                onMouseMove={(e) => {
+                  if (mouseDownPos.current) {
+                    const dx = Math.abs(e.clientX - mouseDownPos.current.x);
+                    const dy = Math.abs(e.clientY - mouseDownPos.current.y);
+                    if (dx > 3 || dy > 3) {
+                      isDragging.current = true;
+                    }
+                  }
+                }}
+                onMouseUp={() => {
+                  if (!isDragging.current && mouseDownPos.current) {
+                    setIsEditing(true);
+                  }
+                  mouseDownPos.current = null;
+                  isDragging.current = false;
+                }}
                 className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-white/20 rounded flex-shrink-0"
               >
                 <Pencil className={`w-2.5 h-2.5 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} />

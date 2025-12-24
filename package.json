@@ -1,6 +1,6 @@
 {
-  "name": "process-map-builder",
-  "version": "0.1.0",
+  "name": "flowcraft",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,11 +9,16 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.2",
+    "@codemirror/lang-javascript": "^6.2.2",
     "@dagrejs/dagre": "^1.1.8",
+    "@uiw/codemirror-theme-github": "^4.23.6",
+    "@uiw/codemirror-theme-tokyo-night": "^4.23.6",
+    "@uiw/react-codemirror": "^4.23.6",
     "@xyflow/react": "^12.10.0",
     "framer-motion": "^12.23.26",
     "html-to-image": "^1.11.13",
+    "idb-keyval": "^6.2.1",
+    "jspdf": "^2.5.2",
     "lucide-react": "^0.562.0",
     "next": "16.1.0",
     "react": "19.2.3",

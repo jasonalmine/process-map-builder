@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Sparkles, Moon, Sun, ChevronDown } from 'lucide-react';
+import { Workflow, Moon, Sun, ChevronDown } from 'lucide-react';
 import { useFlowStore } from '@/store/flowStore';
 import { useThemeStore } from '@/store/themeStore';
+import { useViewModeStore } from '@/store/viewModeStore';
 import { sampleFlows } from '@/data/sampleFlows';
 
 const FlowCanvas = dynamic(() => import('@/components/FlowCanvas'), {
@@ -12,14 +13,18 @@ const FlowCanvas = dynamic(() => import('@/components/FlowCanvas'), {
   loading: () => (
     <div className="w-full h-full flex items-center justify-center">
       <div className="flex items-center gap-3 text-gray-400">
-        <Sparkles className="w-5 h-5 animate-pulse" />
+        <Workflow className="w-5 h-5 animate-pulse" />
         <span>Loading canvas...</span>
       </div>
     </div>
   ),
 });
 
-const PromptInput = dynamic(() => import('@/components/PromptInput'), {
+const MermaidEditor = dynamic(() => import('@/components/MermaidEditor'), {
+  ssr: false,
+});
+
+const DiagramManager = dynamic(() => import('@/components/DiagramManager'), {
   ssr: false,
 });
 
@@ -27,6 +32,7 @@ export default function Home() {
   const nodes = useFlowStore((state) => state.nodes);
   const loadSampleFlow = useFlowStore((state) => state.loadSampleFlow);
   const { theme, toggleTheme } = useThemeStore();
+  const isViewMode = useViewModeStore((state) => state.isViewMode);
   const hasNodes = nodes.length > 0;
 
   // Apply theme to html element
@@ -45,7 +51,7 @@ export default function Home() {
     <main className={`h-screen w-screen overflow-hidden flex flex-col transition-colors duration-300 ${
       theme === 'dark' ? 'bg-gray-950' : 'bg-gray-100'
     }`}>
-      {/* Header */}
+      {/* Header - simplified in view mode */}
       <header className={`flex-shrink-0 border-b backdrop-blur-xl z-10 transition-colors duration-300 ${
         theme === 'dark'
           ? 'border-gray-800 bg-gray-900/50'
@@ -54,19 +60,20 @@ export default function Home() {
         <div className="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/25">
-              <Sparkles className="w-5 h-5 text-white" />
+              <Workflow className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                ProcessAI
+                FlowCraft
               </h1>
               <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                AI-Powered Flow Generator
+                {isViewMode ? 'Shared Flowchart' : 'Visual Mermaid Editor'}
               </p>
             </div>
           </div>
 
           <nav className="flex items-center gap-4">
+            {!isViewMode && <DiagramManager />}
             <button
               onClick={toggleTheme}
               className={`p-2 rounded-lg transition-colors ${
@@ -89,10 +96,15 @@ export default function Home() {
       {/* Canvas */}
       <div className="flex-1 relative">
         <FlowCanvas />
-        <PromptInput />
 
-        {/* Empty state overlay - only show when canvas is empty */}
-        {!hasNodes && <EmptyState theme={theme} onLoadSample={loadSampleFlow} />}
+        {/* Hide editor and empty state in view mode */}
+        {!isViewMode && (
+          <>
+            <MermaidEditor />
+            {/* Empty state overlay - only show when canvas is empty */}
+            {!hasNodes && <EmptyState theme={theme} onLoadSample={loadSampleFlow} />}
+          </>
+        )}
       </div>
     </main>
   );
@@ -107,16 +119,16 @@ function EmptyState({ theme, onLoadSample }: { theme: 'light' | 'dark'; onLoadSa
         <div className={`w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-purple-600/20 to-indigo-600/20 border flex items-center justify-center ${
           theme === 'dark' ? 'border-purple-500/20' : 'border-purple-300/40'
         }`}>
-          <Sparkles className="w-10 h-10 text-purple-400" />
+          <Workflow className="w-10 h-10 text-purple-400" />
         </div>
         <h2 className={`text-xl font-semibold mb-2 ${
           theme === 'dark' ? 'text-white' : 'text-gray-800'
         }`}>
-          Describe Your Process
+          Create Your Flowchart
         </h2>
         <p className={`text-sm mb-6 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-          Enter a description of your business process below, or explore one of our
-          industry-specific sample flows.
+          Write Mermaid code in the editor below, or load a sample flow to get started.
+          Drag nodes from the palette to build visually.
         </p>
 
         {/* Sample Flow Picker */}
