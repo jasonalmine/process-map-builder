@@ -12,6 +12,20 @@ function generateShortCode(): string {
   return code;
 }
 
+// Simple hash function for password (client-side, server should use bcrypt)
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export interface ShareOptions {
+  isPrivate?: boolean;
+  password?: string;
+}
+
 export interface ShareResult {
   success: boolean;
   shortCode?: string;
@@ -22,6 +36,7 @@ export interface ShareResult {
 export interface LoadResult {
   success: boolean;
   diagram?: SharedDiagram;
+  requiresPassword?: boolean;
   error?: string;
 }
 
@@ -30,7 +45,8 @@ export async function shareDiagram(
   nodes: Node<ProcessNodeData>[],
   edges: Edge[],
   name?: string,
-  mermaidCode?: string
+  mermaidCode?: string,
+  options?: ShareOptions
 ): Promise<ShareResult> {
   if (!isSupabaseConfigured || !supabase) {
     return { success: false, error: 'Supabase not configured' };
@@ -38,6 +54,15 @@ export async function shareDiagram(
 
   try {
     const shortCode = generateShortCode();
+
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Hash password if provided
+    let passwordHash: string | null = null;
+    if (options?.password) {
+      passwordHash = await hashPassword(options.password);
+    }
 
     const { error } = await supabase
       .from('shared_diagrams')
@@ -48,12 +73,15 @@ export async function shareDiagram(
         edges: edges,
         mermaid_code: mermaidCode || null,
         view_count: 0,
+        user_id: user?.id || null,
+        is_private: options?.isPrivate || false,
+        password_hash: passwordHash,
       });
 
     if (error) {
       // If short code collision, try again
       if (error.code === '23505') {
-        return shareDiagram(nodes, edges, name, mermaidCode);
+        return shareDiagram(nodes, edges, name, mermaidCode, options);
       }
       throw error;
     }
@@ -74,8 +102,40 @@ export async function shareDiagram(
   }
 }
 
+// Check if a shared diagram requires a password
+export async function checkShareAccess(shortCode: string): Promise<{ requiresPassword: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { requiresPassword: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('shared_diagrams')
+      .select('password_hash, is_private')
+      .eq('short_code', shortCode)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return { requiresPassword: false, error: 'Diagram not found' };
+      }
+      throw error;
+    }
+
+    return {
+      requiresPassword: !!data.password_hash,
+    };
+  } catch (error) {
+    console.error('Error checking share access:', error);
+    return {
+      requiresPassword: false,
+      error: error instanceof Error ? error.message : 'Failed to check access'
+    };
+  }
+}
+
 // Load a shared diagram by short code
-export async function loadSharedDiagram(shortCode: string): Promise<LoadResult> {
+export async function loadSharedDiagram(shortCode: string, password?: string): Promise<LoadResult> {
   if (!isSupabaseConfigured || !supabase) {
     return { success: false, error: 'Supabase not configured' };
   }
@@ -95,6 +155,27 @@ export async function loadSharedDiagram(shortCode: string): Promise<LoadResult> 
       throw error;
     }
 
+    // Check if password is required
+    if (data.password_hash) {
+      if (!password) {
+        return {
+          success: false,
+          requiresPassword: true,
+          error: 'Password required',
+        };
+      }
+
+      // Verify password
+      const providedHash = await hashPassword(password);
+      if (providedHash !== data.password_hash) {
+        return {
+          success: false,
+          requiresPassword: true,
+          error: 'Incorrect password',
+        };
+      }
+    }
+
     // Increment view count (fire and forget)
     supabase
       .from('shared_diagrams')
@@ -111,6 +192,69 @@ export async function loadSharedDiagram(shortCode: string): Promise<LoadResult> 
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to load diagram'
+    };
+  }
+}
+
+// Get user's shared diagrams
+export async function getUserSharedDiagrams(): Promise<{ success: boolean; diagrams: SharedDiagram[]; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, diagrams: [], error: 'Supabase not configured' };
+  }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, diagrams: [], error: 'Not authenticated' };
+    }
+
+    const { data, error } = await supabase
+      .from('shared_diagrams')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      success: true,
+      diagrams: (data || []) as SharedDiagram[],
+    };
+  } catch (error) {
+    console.error('Error fetching user shares:', error);
+    return {
+      success: false,
+      diagrams: [],
+      error: error instanceof Error ? error.message : 'Failed to fetch shares'
+    };
+  }
+}
+
+// Delete a shared diagram
+export async function deleteSharedDiagram(shortCode: string): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('shared_diagrams')
+      .delete()
+      .eq('short_code', shortCode);
+
+    if (error) {
+      throw error;
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting share:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete share'
     };
   }
 }

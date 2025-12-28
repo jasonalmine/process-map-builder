@@ -16,15 +16,16 @@ export interface LayoutSpacing {
 }
 
 export const DEFAULT_SPACING: LayoutSpacing = {
-  nodeSpacing: 3,
-  rankSpacing: 3,
+  nodeSpacing: 4,  // More spacious like Mermaid
+  rankSpacing: 4,  // More spacious like Mermaid
 };
 
-// Convert 1-5 scale to actual pixel values
+// Convert 1-5 scale to actual pixel values (Mermaid-like spacing)
 function getSpacingValues(spacing: LayoutSpacing): { nodesep: number; ranksep: number } {
-  // Scale: 1 = tight (40px), 3 = normal (80px), 5 = spacious (160px)
-  const nodeBase = 40 + (spacing.nodeSpacing - 1) * 30;  // 40, 70, 100, 130, 160
-  const rankBase = 50 + (spacing.rankSpacing - 1) * 37;  // 50, 87, 124, 161, 198
+  // Scale: 1 = tight (60px), 3 = normal (140px), 5 = spacious (280px)
+  // Matches Mermaid's default spacing (NODE_SEP ~280, RANK_SEP ~150)
+  const nodeBase = 60 + (spacing.nodeSpacing - 1) * 55;   // 60, 115, 170, 225, 280
+  const rankBase = 70 + (spacing.rankSpacing - 1) * 40;   // 70, 110, 150, 190, 230
   return { nodesep: nodeBase, ranksep: rankBase };
 }
 

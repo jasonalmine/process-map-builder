@@ -7,6 +7,8 @@ import { useFlowStore } from '@/store/flowStore';
 import { useThemeStore } from '@/store/themeStore';
 import { useViewModeStore } from '@/store/viewModeStore';
 import { sampleFlows } from '@/data/sampleFlows';
+import { AuthGate } from '@/components/auth/AuthGate';
+import { UserMenu } from '@/components/auth/UserMenu';
 
 const FlowCanvas = dynamic(() => import('@/components/FlowCanvas'), {
   ssr: false,
@@ -48,6 +50,7 @@ export default function Home() {
   }, [theme]);
 
   return (
+    <AuthGate>
     <main className={`h-screen w-screen overflow-hidden flex flex-col transition-colors duration-300 ${
       theme === 'dark' ? 'bg-gray-950' : 'bg-gray-100'
     }`}>
@@ -67,12 +70,12 @@ export default function Home() {
                 FlowCraft
               </h1>
               <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                {isViewMode ? 'Shared Flowchart' : 'Visual Mermaid Editor'}
+                {isViewMode ? 'Shared Flowchart' : 'by Ventryx'}
               </p>
             </div>
           </div>
 
-          <nav className="flex items-center gap-4">
+          <nav className="flex items-center gap-2">
             {!isViewMode && <DiagramManager />}
             <button
               onClick={toggleTheme}
@@ -89,6 +92,7 @@ export default function Home() {
                 <Moon className="w-5 h-5" />
               )}
             </button>
+            <UserMenu theme={theme} />
           </nav>
         </div>
       </header>
@@ -107,6 +111,7 @@ export default function Home() {
         )}
       </div>
     </main>
+    </AuthGate>
   );
 }
 

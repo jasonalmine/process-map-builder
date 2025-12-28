@@ -103,6 +103,7 @@ function FlowCanvasInner() {
     setEdges,
     addGroup,
     deleteSelectedNodes,
+    deleteSelectedEdges,
     clearFlow,
     undo,
     redo,
@@ -171,10 +172,11 @@ function FlowCanvasInner() {
         return;
       }
 
-      // Delete selected nodes
+      // Delete selected nodes and edges
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteSelectedNodes();
+        deleteSelectedEdges();
       }
 
       // Undo: Ctrl/Cmd + Z
@@ -195,7 +197,7 @@ function FlowCanvasInner() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [deleteSelectedNodes, undo, redo]);
+  }, [deleteSelectedNodes, deleteSelectedEdges, undo, redo]);
 
   const nodeTypes: NodeTypes = useMemo(
     () => ({

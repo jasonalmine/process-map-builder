@@ -42,6 +42,7 @@ interface FlowState {
   updateEdgeLabel: (edgeId: string, label: string) => void;
   deleteEdge: (edgeId: string) => void;
   deleteSelectedNodes: () => void;
+  deleteSelectedEdges: () => void;
   setIsGenerating: (isGenerating: boolean) => void;
   setPrompt: (prompt: string) => void;
   clearFlow: () => void;
@@ -284,6 +285,17 @@ export const useFlowStore = create<FlowState>()(
           edges: edges.filter(
             (e) => !selectedNodeIds.includes(e.source) && !selectedNodeIds.includes(e.target)
           ),
+        });
+      },
+
+      deleteSelectedEdges: () => {
+        const { edges } = get();
+        const selectedEdges = edges.filter((e) => e.selected);
+        if (selectedEdges.length === 0) return;
+
+        get().saveToHistory();
+        set({
+          edges: edges.filter((e) => !e.selected),
         });
       },
 
