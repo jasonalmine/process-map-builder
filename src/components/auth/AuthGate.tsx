@@ -164,7 +164,26 @@ export function AuthGate({ children }: AuthGateProps) {
           {/* Footer */}
           <footer className="border-t border-gray-800 py-8">
             <div className="max-w-6xl mx-auto px-6 text-center text-gray-500 text-sm">
-              <p>&copy; {new Date().getFullYear()} Ventryx. All rights reserved.</p>
+              <p className="mb-3">&copy; {new Date().getFullYear()} Ventryx. All rights reserved.</p>
+              <div className="flex items-center justify-center gap-4">
+                <a
+                  href="https://www.ventryx.ai/privacy-policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-gray-300 transition-colors"
+                >
+                  Privacy Policy
+                </a>
+                <span>·</span>
+                <a
+                  href="https://www.ventryx.ai/terms-of-service"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-gray-300 transition-colors"
+                >
+                  Terms of Service
+                </a>
+              </div>
             </div>
           </footer>
         </div>
