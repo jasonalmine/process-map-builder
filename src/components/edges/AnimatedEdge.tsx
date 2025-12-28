@@ -11,17 +11,122 @@ import { useThemeStore } from '@/store/themeStore';
 import { useFlowStore } from '@/store/flowStore';
 import { Pencil, X } from 'lucide-react';
 
+export type EdgeColor = 'default' | 'success' | 'error' | 'warning' | 'info';
+export type EdgeType = 'bezier' | 'orthogonal' | 'straight';
+
 interface AnimatedEdgeData {
   label?: string;
+  edgeColor?: EdgeColor;
+  edgeType?: EdgeType;
   [key: string]: unknown;
 }
 
+// Color palette for edge colors
+const EDGE_COLORS: Record<EdgeColor, { dark: string; light: string; darkHover: string; lightHover: string }> = {
+  default: { dark: '#6b7280', light: '#9ca3af', darkHover: '#9ca3af', lightHover: '#6b7280' },
+  success: { dark: '#22c55e', light: '#16a34a', darkHover: '#4ade80', lightHover: '#15803d' },
+  error: { dark: '#ef4444', light: '#dc2626', darkHover: '#f87171', lightHover: '#b91c1c' },
+  warning: { dark: '#f59e0b', light: '#d97706', darkHover: '#fbbf24', lightHover: '#b45309' },
+  info: { dark: '#3b82f6', light: '#2563eb', darkHover: '#60a5fa', lightHover: '#1d4ed8' },
+};
+
 /**
- * n8n-style edge path calculation
+ * Orthogonal (right-angle) edge path calculation
+ * Creates L-shaped or Z-shaped paths with 90-degree angles
+ */
+function getOrthogonalEdgePath(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  sourcePosition: Position,
+  targetPosition: Position
+): { path: string; labelX: number; labelY: number } {
+  const midX = (sourceX + targetX) / 2;
+  const midY = (sourceY + targetY) / 2;
+  const offset = 40; // Minimum distance from node before turning
+
+  let path = '';
+  let labelX = midX;
+  let labelY = midY;
+
+  // Vertical flow (top-bottom connections)
+  if (
+    (sourcePosition === Position.Bottom && targetPosition === Position.Top) ||
+    (sourcePosition === Position.Top && targetPosition === Position.Bottom)
+  ) {
+    const goingDown = sourcePosition === Position.Bottom;
+    const cornerY = goingDown
+      ? Math.max(sourceY + offset, midY)
+      : Math.min(sourceY - offset, midY);
+
+    if (Math.abs(sourceX - targetX) < 5) {
+      // Straight vertical line
+      path = `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
+    } else {
+      // Z-shaped path
+      path = `M ${sourceX},${sourceY} L ${sourceX},${cornerY} L ${targetX},${cornerY} L ${targetX},${targetY}`;
+      labelY = cornerY;
+    }
+  }
+  // Horizontal flow (left-right connections)
+  else if (
+    (sourcePosition === Position.Right && targetPosition === Position.Left) ||
+    (sourcePosition === Position.Left && targetPosition === Position.Right)
+  ) {
+    const goingRight = sourcePosition === Position.Right;
+    const cornerX = goingRight
+      ? Math.max(sourceX + offset, midX)
+      : Math.min(sourceX - offset, midX);
+
+    if (Math.abs(sourceY - targetY) < 5) {
+      // Straight horizontal line
+      path = `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
+    } else {
+      // Z-shaped path
+      path = `M ${sourceX},${sourceY} L ${cornerX},${sourceY} L ${cornerX},${targetY} L ${targetX},${targetY}`;
+      labelX = cornerX;
+    }
+  }
+  // Mixed directions - L-shaped or more complex
+  else {
+    // Simple L-shape for mixed connections
+    if (sourcePosition === Position.Bottom || sourcePosition === Position.Top) {
+      path = `M ${sourceX},${sourceY} L ${sourceX},${targetY} L ${targetX},${targetY}`;
+      labelX = sourceX;
+      labelY = targetY;
+    } else {
+      path = `M ${sourceX},${sourceY} L ${targetX},${sourceY} L ${targetX},${targetY}`;
+      labelX = targetX;
+      labelY = sourceY;
+    }
+  }
+
+  return { path, labelX, labelY };
+}
+
+/**
+ * Straight edge path calculation
+ */
+function getStraightEdgePath(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number
+): { path: string; labelX: number; labelY: number } {
+  return {
+    path: `M ${sourceX},${sourceY} L ${targetX},${targetY}`,
+    labelX: (sourceX + targetX) / 2,
+    labelY: (sourceY + targetY) / 2,
+  };
+}
+
+/**
+ * n8n-style edge path calculation (bezier)
  * - Straight lines when nodes are aligned on the same axis
  * - Smooth bezier curves only when needed for non-aligned connections
  */
-function getN8nEdgePath(
+function getBezierEdgePath(
   sourceX: number,
   sourceY: number,
   targetX: number,
@@ -127,18 +232,30 @@ function AnimatedEdgeComponent({
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
 
-  // Calculate n8n-style path
-  const { path: edgePath, labelX, labelY } = useMemo(
-    () => getN8nEdgePath(sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition),
-    [sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition]
-  );
+  // Get edge type (default to bezier)
+  const edgeType = edgeData?.edgeType || 'bezier';
+
+  // Calculate path based on edge type
+  const { path: edgePath, labelX, labelY } = useMemo(() => {
+    switch (edgeType) {
+      case 'orthogonal':
+        return getOrthogonalEdgePath(sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition);
+      case 'straight':
+        return getStraightEdgePath(sourceX, sourceY, targetX, targetY);
+      case 'bezier':
+      default:
+        return getBezierEdgePath(sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition);
+    }
+  }, [sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, edgeType]);
 
   // Show controls when hovered or selected
   const showControls = isHovered || selected;
 
-  // n8n-style colors - muted gray with good contrast
-  const edgeColor = isDark ? '#6b7280' : '#9ca3af';
-  const edgeColorHover = isDark ? '#9ca3af' : '#6b7280';
+  // Get edge color from data or use default
+  const colorKey = edgeData?.edgeColor || 'default';
+  const colorPalette = EDGE_COLORS[colorKey];
+  const edgeColor = isDark ? colorPalette.dark : colorPalette.light;
+  const edgeColorHover = isDark ? colorPalette.darkHover : colorPalette.lightHover;
   const edgeColorSelected = isDark ? '#ef4444' : '#dc2626'; // Red when selected
 
   const handleSave = useCallback(() => {
@@ -220,11 +337,11 @@ function AnimatedEdgeComponent({
         }}
       />
 
-      {/* Animated flow line - n8n style dashed animation */}
+      {/* Animated flow line - moving green dashes */}
       <path
         d={edgePath}
         fill="none"
-        stroke={selected ? edgeColorSelected : isDark ? '#a78bfa' : '#8b5cf6'}
+        stroke={selected ? edgeColorSelected : isDark ? '#22c55e' : '#16a34a'}
         strokeWidth={2}
         strokeDasharray="5 5"
         strokeLinecap="round"

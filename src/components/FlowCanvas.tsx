@@ -442,6 +442,29 @@ function FlowCanvasInner() {
     }
   }, [nodes, edges]);
 
+  // Connection validation - prevent self-connections and duplicate edges
+  const isValidConnection = useCallback(
+    (connection: { source: string | null; target: string | null; sourceHandle?: string | null; targetHandle?: string | null }) => {
+      // Prevent self-connections
+      if (connection.source === connection.target) {
+        return false;
+      }
+
+      // Prevent duplicate edges (same source and target)
+      const isDuplicate = edges.some(
+        (edge) =>
+          edge.source === connection.source &&
+          edge.target === connection.target
+      );
+      if (isDuplicate) {
+        return false;
+      }
+
+      return true;
+    },
+    [edges]
+  );
+
   return (
     <div ref={reactFlowWrapper} className="w-full h-full">
       <ReactFlow
@@ -450,6 +473,7 @@ function FlowCanvasInner() {
         onNodesChange={isViewMode ? undefined : onNodesChange}
         onEdgesChange={isViewMode ? undefined : onEdgesChange}
         onConnect={isViewMode ? undefined : onConnect}
+        isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{
@@ -465,7 +489,15 @@ function FlowCanvasInner() {
         nodesDraggable={!isViewMode}
         nodesConnectable={!isViewMode}
         elementsSelectable={!isViewMode}
-        panOnDrag={true}
+        // Snap to grid for cleaner alignment
+        snapToGrid={true}
+        snapGrid={[20, 20]}
+        // Enable box selection with drag (hold shift to multi-select)
+        selectionOnDrag={true}
+        // Magnetic handles - connection snaps within 30px radius
+        connectionRadius={30}
+        // Pan with middle mouse button or right-click, drag select with left
+        panOnDrag={[1, 2]}
         zoomOnScroll={true}
         onContextMenu={handleContextMenu}
         onDragOver={handleDragOver}

@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useRef } from 'react';
+import { memo, useState, useRef, useCallback, useEffect } from 'react';
 import { Handle, Position, type Node, type NodeProps, NodeResizer } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import {
@@ -324,6 +324,13 @@ function QuickActions({
 function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
+
+  // Sync editValue when label changes externally
+  useEffect(() => {
+    if (!isEditing) {
+      setEditValue(data.label);
+    }
+  }, [data.label, isEditing]);
   const { updateNodeLabel, updateNodeData } = useFlowStore();
   const theme = useThemeStore((state) => state.theme);
   const colorTheme = useThemeStore((state) => state.colorTheme);
@@ -332,6 +339,12 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
   // Track mouse movement to distinguish click from drag
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
+
+  // Double-click to edit handler
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(true);
+  }, []);
 
   // Get theme-based node styling
   const themeConfig = getThemeConfig(colorTheme);
@@ -475,6 +488,7 @@ function ProcessNodeComponent({ id, data, selected }: NodeProps<ProcessNodeType>
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}
         className="relative"
+        onDoubleClick={handleDoubleClick}
       >
         <ShapeWrapper
           shape={shape}

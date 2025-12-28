@@ -40,6 +40,7 @@ interface FlowState {
   updateGroupLabel: (groupId: string, label: string) => void;
   updateGroupColor: (groupId: string, color: GroupColor) => void;
   updateEdgeLabel: (edgeId: string, label: string) => void;
+  updateEdgeData: (edgeId: string, data: Record<string, unknown>) => void;
   deleteEdge: (edgeId: string) => void;
   deleteSelectedNodes: () => void;
   deleteSelectedEdges: () => void;
@@ -262,6 +263,17 @@ export const useFlowStore = create<FlowState>()(
           edges: get().edges.map((edge) =>
             edge.id === edgeId
               ? { ...edge, data: { ...edge.data, label } }
+              : edge
+          ),
+        });
+      },
+
+      updateEdgeData: (edgeId, newData) => {
+        get().saveToHistory();
+        set({
+          edges: get().edges.map((edge) =>
+            edge.id === edgeId
+              ? { ...edge, data: { ...edge.data, ...newData } }
               : edge
           ),
         });
