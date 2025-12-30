@@ -16,16 +16,16 @@ export interface LayoutSpacing {
 }
 
 export const DEFAULT_SPACING: LayoutSpacing = {
-  nodeSpacing: 4,  // More spacious like Mermaid
-  rankSpacing: 4,  // More spacious like Mermaid
+  nodeSpacing: 3,  // Balanced default
+  rankSpacing: 3,  // Balanced default
 };
 
-// Convert 1-5 scale to actual pixel values (Mermaid-like spacing)
+// Convert 1-5 scale to actual pixel values
 function getSpacingValues(spacing: LayoutSpacing): { nodesep: number; ranksep: number } {
-  // Scale: 1 = tight (60px), 3 = normal (140px), 5 = spacious (280px)
-  // Matches Mermaid's default spacing (NODE_SEP ~280, RANK_SEP ~150)
-  const nodeBase = 60 + (spacing.nodeSpacing - 1) * 55;   // 60, 115, 170, 225, 280
-  const rankBase = 70 + (spacing.rankSpacing - 1) * 40;   // 70, 110, 150, 190, 230
+  // Scale: 1 = tight (40px), 3 = normal (80px), 5 = spacious (160px)
+  // More reasonable defaults that don't spread nodes too far apart
+  const nodeBase = 40 + (spacing.nodeSpacing - 1) * 30;   // 40, 70, 100, 130, 160
+  const rankBase = 50 + (spacing.rankSpacing - 1) * 30;   // 50, 80, 110, 140, 170
   return { nodesep: nodeBase, ranksep: rankBase };
 }
 
@@ -282,15 +282,14 @@ function layoutTree(
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   const { nodesep, ranksep } = getSpacingValues(spacing);
 
-  // TB layout with centered alignment for tree look
+  // TB layout - use network-simplex ranker for better branch distribution
   g.setGraph({
     rankdir: 'TB',
     nodesep,
     ranksep,
     marginx: 50,
     marginy: 50,
-    align: 'UL',
-    ranker: 'tight-tree',
+    ranker: 'network-simplex',  // Better for balanced tree layouts
   });
 
   nodes.forEach((node) => {
@@ -324,14 +323,14 @@ function layoutCompact(
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   const { nodesep, ranksep } = getSpacingValues(spacing);
 
-  // Use LR layout with configurable spacing
+  // Use LR layout with network-simplex for better distribution
   g.setGraph({
     rankdir: 'LR',
     nodesep,
     ranksep,
     marginx: 40,
     marginy: 40,
-    align: 'UL',
+    ranker: 'network-simplex',
   });
 
   // Use standard node dimensions

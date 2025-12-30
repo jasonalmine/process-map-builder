@@ -34,11 +34,43 @@ export interface ParseResult {
 }
 
 /**
+ * Strip YAML frontmatter from Mermaid code
+ * Frontmatter is delimited by --- at the start and end
+ * Example:
+ * ---
+ * config:
+ *   theme: redux
+ *   layout: elk
+ * ---
+ */
+function stripFrontmatter(code: string): string {
+  const trimmed = code.trim();
+
+  // Check if code starts with ---
+  if (!trimmed.startsWith('---')) {
+    return code;
+  }
+
+  // Find the closing ---
+  const endIndex = trimmed.indexOf('---', 3);
+  if (endIndex === -1) {
+    // No closing ---, return original
+    return code;
+  }
+
+  // Return everything after the closing ---
+  return trimmed.slice(endIndex + 3).trim();
+}
+
+/**
  * Parse Mermaid flowchart syntax into a structured format
  * Supports: graph TD/TB/LR, node definitions, edge definitions with labels, subgraphs
+ * Automatically strips YAML frontmatter (---config:...---) if present
  */
 export function parseMermaid(code: string): ParseResult {
-  const lines = code.trim().split('\n').map(line => line.trim()).filter(line => line);
+  // Strip frontmatter before parsing
+  const cleanCode = stripFrontmatter(code);
+  const lines = cleanCode.trim().split('\n').map(line => line.trim()).filter(line => line);
 
   if (lines.length === 0) {
     return { success: false, error: 'Empty input' };
@@ -65,8 +97,9 @@ export function parseMermaid(code: string): ParseResult {
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
 
-    // Skip comments and empty lines
+    // Skip comments, empty lines, and direction statements inside subgraphs
     if (line.startsWith('%%') || line === '') continue;
+    if (line.match(/^direction\s+(TB|TD|LR|RL|BT)$/i)) continue;
 
     // Parse subgraph start: "subgraph ID [Label]" or "subgraph Label"
     const subgraphMatch = line.match(/^subgraph\s+([A-Za-z_][A-Za-z0-9_]*)\s*\[([^\]]+)\]/i) ||

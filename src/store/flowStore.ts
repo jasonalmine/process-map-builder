@@ -11,6 +11,8 @@ import {
   addEdge,
 } from '@xyflow/react';
 import { sampleFlows } from '@/data/sampleFlows';
+import { parseMermaid, convertMermaidToFlow } from '@/lib/parseMermaid';
+import { layoutFlow } from '@/lib/layoutFlow';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyNode = Node<any, string>;
@@ -355,8 +357,18 @@ export const useFlowStore = create<FlowState>()(
           ? sampleFlows.find(f => f.id === flowId)
           : sampleFlows[0];
 
-        if (flow) {
-          set({ nodes: flow.nodes, edges: flow.edges });
+        if (flow && flow.mermaidCode) {
+          // Parse Mermaid code and convert to flow
+          const parseResult = parseMermaid(flow.mermaidCode);
+          if (parseResult.success && parseResult.flow) {
+            const { nodes, edges } = convertMermaidToFlow(parseResult.flow);
+            // Apply layout for proper positioning
+            const layoutedNodes = layoutFlow(nodes, edges, 'TB');
+            set({ nodes: layoutedNodes, edges });
+          } else {
+            // Fallback to legacy sample if parsing fails
+            set({ nodes: sampleNodes, edges: sampleEdges });
+          }
         } else {
           // Fallback to legacy sample
           set({ nodes: sampleNodes, edges: sampleEdges });

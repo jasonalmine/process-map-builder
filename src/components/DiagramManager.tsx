@@ -17,6 +17,7 @@ import {
 import { useDiagramStore, SavedDiagram } from '@/store/diagramStore';
 import { useFlowStore } from '@/store/flowStore';
 import { useThemeStore } from '@/store/themeStore';
+import { ConfirmDialog } from '@/components/ui';
 
 function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
@@ -39,6 +40,9 @@ export default function DiagramManager() {
   const [saveName, setSaveName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [diagramToDelete, setDiagramToDelete] = useState<string | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,11 +86,18 @@ export default function DiagramManager() {
     setIsOpen(false);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Delete this diagram?')) {
-      await deleteDiagram(id);
+    setDiagramToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (diagramToDelete) {
+      await deleteDiagram(diagramToDelete);
+      setDiagramToDelete(null);
     }
+    setDeleteDialogOpen(false);
   };
 
   const handleRename = async (id: string) => {
@@ -118,9 +129,11 @@ export default function DiagramManager() {
       try {
         const json = event.target?.result as string;
         const count = await importDiagrams(json);
-        alert(`Imported ${count} diagram(s)`);
+        setImportMessage(`Imported ${count} diagram(s)`);
+        setTimeout(() => setImportMessage(null), 3000);
       } catch (error) {
-        alert('Failed to import diagrams');
+        setImportMessage('Failed to import diagrams');
+        setTimeout(() => setImportMessage(null), 3000);
         console.error(error);
       }
     };
@@ -331,7 +344,7 @@ export default function DiagramManager() {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={(e) => handleDelete(diagram.id, e)}
+                          onClick={(e) => handleDeleteClick(diagram.id, e)}
                           className="p-1 rounded transition-colors hover:bg-red-500/20 text-red-500"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -345,6 +358,42 @@ export default function DiagramManager() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Import status message */}
+      <AnimatePresence>
+        {importMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className={`absolute right-0 top-full mt-14 px-3 py-2 rounded-lg text-sm font-medium shadow-lg ${
+              importMessage.includes('Failed')
+                ? isDark
+                  ? 'bg-red-900/90 text-red-200'
+                  : 'bg-red-100 text-red-800'
+                : isDark
+                  ? 'bg-green-900/90 text-green-200'
+                  : 'bg-green-100 text-green-800'
+            }`}
+          >
+            {importMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirmation dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Delete Diagram"
+        message="Are you sure you want to delete this diagram? This action cannot be undone."
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setDeleteDialogOpen(false);
+          setDiagramToDelete(null);
+        }}
+      />
     </div>
   );
 }
