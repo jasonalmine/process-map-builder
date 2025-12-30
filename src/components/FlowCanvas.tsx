@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { flowToMermaid, flowToMarkdown, exportToPDF, downloadTextFile, copyToClipboard } from '@/lib/exportFlow';
 import { shareDiagram, isSharingAvailable } from '@/lib/shareService';
-import { Dropdown, DropdownItem, Tooltip } from '@/components/ui';
+import { Tooltip } from '@/components/ui';
 
 import ProcessNode from './nodes/ProcessNode';
 import GroupNode from './nodes/GroupNode';

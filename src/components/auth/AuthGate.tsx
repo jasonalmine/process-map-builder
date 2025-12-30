@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useViewModeStore } from '@/store/viewModeStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { AuthModal } from './AuthModal';
 import { Workflow, ArrowRight, Zap, Share2, Palette, Check } from 'lucide-react';
@@ -12,10 +13,16 @@ interface AuthGateProps {
 
 export function AuthGate({ children }: AuthGateProps) {
   const { user, isLoading } = useAuthStore();
+  const isViewMode = useViewModeStore((state) => state.isViewMode);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   // If Supabase is not configured, allow access (development mode)
   if (!isSupabaseConfigured) {
+    return <>{children}</>;
+  }
+
+  // If in view mode (viewing a shared diagram), bypass auth
+  if (isViewMode) {
     return <>{children}</>;
   }
 
