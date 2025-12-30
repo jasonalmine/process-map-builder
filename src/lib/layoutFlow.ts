@@ -273,6 +273,27 @@ function layoutLR(nodes: AnyNode[], edges: ProcessEdge[], spacing: LayoutSpacing
   });
 }
 
+// Check if a flow has true branching (a node with multiple outgoing edges to different paths)
+function hasTrueBranching(edges: ProcessEdge[]): boolean {
+  const outgoingCount = new Map<string, Set<string>>();
+
+  edges.forEach(edge => {
+    if (!outgoingCount.has(edge.source)) {
+      outgoingCount.set(edge.source, new Set());
+    }
+    outgoingCount.get(edge.source)!.add(edge.target);
+  });
+
+  // True branching = a node has 2+ different targets
+  for (const [, targets] of outgoingCount) {
+    if (targets.size >= 2) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Tree-style vertical layout - clean process diagram
 function layoutTree(
   nodes: AnyNode[],
@@ -289,7 +310,8 @@ function layoutTree(
     ranksep,
     marginx: 50,
     marginy: 50,
-    ranker: 'network-simplex',  // Better for balanced tree layouts
+    ranker: 'network-simplex',
+    align: 'UL',  // Upper-left alignment for cleaner vertical lines
   });
 
   nodes.forEach((node) => {
@@ -301,6 +323,27 @@ function layoutTree(
   });
 
   Dagre.layout(g);
+
+  // After layout, check if this is essentially a linear flow (no true branching)
+  // If so, center all nodes on the same X axis for a cleaner look
+  const hasBranching = hasTrueBranching(edges);
+
+  if (!hasBranching && nodes.length > 0) {
+    // For linear flows, center all nodes on a single X axis
+    const positions = nodes.map(node => g.node(node.id));
+    const avgX = positions.reduce((sum, p) => sum + p.x, 0) / positions.length;
+
+    return nodes.map((node) => {
+      const pos = g.node(node.id);
+      return {
+        ...node,
+        position: {
+          x: avgX - NODE_WIDTH / 2,  // Center all nodes on average X
+          y: pos.y - NODE_HEIGHT / 2,
+        },
+      };
+    });
+  }
 
   return nodes.map((node) => {
     const pos = g.node(node.id);
