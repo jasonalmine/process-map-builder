@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { useThemeStore } from '@/store/themeStore';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -110,7 +110,7 @@ function CollapsibleSection({ section }: { section: Section }) {
   );
 }
 
-export default function CheatSheet() {
+function CheatSheet() {
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
 
@@ -161,3 +161,5 @@ export default function CheatSheet() {
     </div>
   );
 }
+
+export default memo(CheatSheet);

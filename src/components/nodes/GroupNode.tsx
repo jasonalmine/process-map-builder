@@ -39,20 +39,20 @@ function GroupNodeComponent({ id, data, selected }: NodeProps<GroupNodeType>) {
     }
   };
 
-  // Get resizer colors based on theme - use first swatch color
-  const getResizerColor = () => {
-    const colorMap: Record<string, string> = {
-      default: 'gray',
-      wood: 'amber',
-      green: 'emerald',
-      purple: 'purple',
-      rainbow: 'slate',
+  // Use static class mappings since dynamic Tailwind classes don't work
+  const getResizerClasses = () => {
+    const classMap: Record<string, { line: string; handle: string }> = {
+      default: { line: '!border-gray-500', handle: '!bg-gray-500 !border-gray-500' },
+      wood: { line: '!border-amber-500', handle: '!bg-amber-500 !border-amber-500' },
+      green: { line: '!border-emerald-500', handle: '!bg-emerald-500 !border-emerald-500' },
+      purple: { line: '!border-purple-500', handle: '!bg-purple-500 !border-purple-500' },
+      rainbow: { line: '!border-slate-500', handle: '!bg-slate-500 !border-slate-500' },
     };
-    return colorMap[colorTheme] || 'gray';
+    return classMap[colorTheme] || classMap.default;
   };
-  const resizerColor = getResizerColor();
-  const resizerLineClass = `!border-${resizerColor}-500`;
-  const resizerHandleClass = `!bg-${resizerColor}-500 !border-${resizerColor}-500`;
+  const resizerClasses = getResizerClasses();
+  const resizerLineClass = resizerClasses.line;
+  const resizerHandleClass = resizerClasses.handle;
 
   return (
     <>

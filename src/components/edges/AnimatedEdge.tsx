@@ -265,6 +265,8 @@ function AnimatedEdgeComponent({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Stop propagation to prevent edge deletion when pressing Delete/Backspace
+      e.stopPropagation();
       if (e.key === 'Enter') {
         handleSave();
       } else if (e.key === 'Escape') {
@@ -403,19 +405,13 @@ function AnimatedEdgeComponent({
                 {edgeData.label}
                 <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
               </div>
-              {showControls && (
+              {selected && (
                 <button
                   onClick={handleDelete}
-                  className={`p-1.5 rounded-md shadow-md border transition-all ${
-                    selected
-                      ? 'bg-red-600 text-white border-red-500 hover:bg-red-700'
-                      : isDark
-                        ? 'bg-red-900/80 text-red-400 border-red-800 hover:bg-red-900'
-                        : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'
-                  }`}
+                  className="p-1.5 rounded-md shadow-md border transition-all bg-red-600 text-white border-red-500 hover:bg-red-700"
                   title="Delete connection (or press Delete key)"
                 >
-                  <X className={selected ? 'w-4 h-4' : 'w-3 h-3'} />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -433,19 +429,15 @@ function AnimatedEdgeComponent({
                   + Label
                 </button>
               )}
-              <button
-                onClick={handleDelete}
-                className={`p-1.5 rounded-md shadow-md border transition-all ${
-                  selected
-                    ? 'bg-red-600 text-white border-red-500 hover:bg-red-700'
-                    : isDark
-                      ? 'bg-red-900/80 text-red-400 border-red-800 hover:bg-red-900'
-                      : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'
-                }`}
-                title="Delete connection (or press Delete key)"
-              >
-                <X className={selected ? 'w-4 h-4' : 'w-3 h-3'} />
-              </button>
+              {selected && (
+                <button
+                  onClick={handleDelete}
+                  className="p-1.5 rounded-md shadow-md border transition-all bg-red-600 text-white border-red-500 hover:bg-red-700"
+                  title="Delete connection (or press Delete key)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           ) : null}
         </div>

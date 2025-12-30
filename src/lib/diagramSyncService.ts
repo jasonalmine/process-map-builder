@@ -29,9 +29,16 @@ export async function fetchUserDiagrams(): Promise<{ success: boolean; diagrams:
     return { success: false, diagrams: [], error: 'Supabase not configured' };
   }
 
+  // Get current user to filter diagrams
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { success: false, diagrams: [], error: 'Not authenticated' };
+  }
+
   const { data, error } = await supabase
     .from('user_diagrams')
     .select('*')
+    .eq('user_id', user.id)
     .eq('is_deleted', false)
     .order('updated_at', { ascending: false });
 
@@ -97,6 +104,12 @@ export async function updateDiagramInCloud(
     return { success: false, error: 'Supabase not configured' };
   }
 
+  // Get current user to ensure they own this diagram
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { success: false, error: 'Not authenticated' };
+  }
+
   const updateData: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -110,6 +123,7 @@ export async function updateDiagramInCloud(
     .from('user_diagrams')
     .update(updateData)
     .eq('id', id)
+    .eq('user_id', user.id)
     .select()
     .single();
 
@@ -129,11 +143,18 @@ export async function deleteDiagramFromCloud(id: string): Promise<{ success: boo
     return { success: false, error: 'Supabase not configured' };
   }
 
-  // Soft delete
+  // Get current user to ensure they own this diagram
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { success: false, error: 'Not authenticated' };
+  }
+
+  // Soft delete - only if user owns this diagram
   const { error } = await supabase
     .from('user_diagrams')
     .update({ is_deleted: true })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user.id);
 
   if (error) {
     console.error('Error deleting diagram:', error);
@@ -148,10 +169,17 @@ export async function getDiagramById(id: string): Promise<{ success: boolean; di
     return { success: false, error: 'Supabase not configured' };
   }
 
+  // Get current user to ensure they can only access their own diagrams
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { success: false, error: 'Not authenticated' };
+  }
+
   const { data, error } = await supabase
     .from('user_diagrams')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
 

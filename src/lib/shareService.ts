@@ -233,20 +233,32 @@ export async function getUserSharedDiagrams(): Promise<{ success: boolean; diagr
   }
 }
 
-// Delete a shared diagram
+// Delete a shared diagram (only if user owns it)
 export async function deleteSharedDiagram(shortCode: string): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured || !supabase) {
     return { success: false, error: 'Supabase not configured' };
   }
 
   try {
-    const { error } = await supabase
+    // Get current user to ensure they own this shared diagram
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    const { error, count } = await supabase
       .from('shared_diagrams')
       .delete()
-      .eq('short_code', shortCode);
+      .eq('short_code', shortCode)
+      .eq('user_id', user.id);
 
     if (error) {
       throw error;
+    }
+
+    // If no rows were deleted, user doesn't own this share
+    if (count === 0) {
+      return { success: false, error: 'You do not have permission to delete this share' };
     }
 
     return { success: true };

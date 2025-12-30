@@ -106,6 +106,8 @@ export default function NodePalette() {
             <button
               key={item.type}
               draggable
+              role="button"
+              aria-label={`Add ${item.label} node. Drag to canvas or click to add at center.`}
               onDragStart={(e) => {
                 e.dataTransfer.setData('application/flowcraft-node-type', item.type);
                 e.dataTransfer.effectAllowed = 'copy';
@@ -137,6 +139,7 @@ export default function NodePalette() {
         {/* Tool/App Button */}
         <button
           onClick={() => setIsToolPickerOpen(true)}
+          aria-label="Add tool or app node with logo"
           className={`group relative flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all bg-gradient-to-r ${toolStyle.gradient} hover:opacity-80`}
         >
           <div className={`w-6 h-6 rounded-md flex items-center justify-center ${toolStyle.iconBg}`}>

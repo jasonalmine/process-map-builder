@@ -17,11 +17,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
+    // Get initial session with error handling
+    supabase.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (error) {
+          console.error('Error getting session:', error);
+        }
+        setSession(session);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error('Failed to get auth session:', error);
+        setSession(null);
+        setLoading(false);
+      });
 
     // Listen for auth changes
     const {

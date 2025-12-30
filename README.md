@@ -6,16 +6,21 @@ A free, open-source visual flowchart editor powered by Mermaid syntax. Create be
 
 ## Features
 
-- **Visual Editor** - Drag-and-drop nodes to build flowcharts
+### Core Features
+- **Visual Editor** - Drag-and-drop nodes to build flowcharts with snap-to-grid alignment
 - **Mermaid Syntax** - Write or import Mermaid code directly
 - **AI Assist** - Generate flowcharts using ChatGPT, Claude, or Gemini (free, no API key needed)
 - **Multiple Export Formats** - PNG, SVG, PDF, Mermaid code, Markdown
-- **Share Links** - Share flowcharts via URL (view-only mode)
-- **Templates** - Pre-built workflow templates for common use cases
-- **Dark/Light Mode** - Easy on the eyes
+- **Share Links** - Share flowcharts via short URLs with optional password protection
+- **Templates** - 12+ pre-built workflow templates for common use cases
+- **Dark/Light Mode** - Multiple color themes (Ocean, Forest, Sunset, Wood, Lavender)
 - **Offline Support** - Works without internet (PWA)
-- **No Account Required** - Start creating immediately
 - **100% Free** - No paywalls, no premium tiers
+
+### Cloud Features (Optional)
+- **User Authentication** - Sign up with email/password, magic link, or Google OAuth
+- **Cloud Sync** - Save diagrams to the cloud and access from anywhere
+- **User Data Isolation** - Your diagrams are private and secure
 
 ## Tech Stack
 
@@ -73,6 +78,17 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | Supabase anonymous key |
 
 **Note**: The app works fully offline without Supabase. Cloud features are optional.
+
+### Supabase Setup (Optional)
+
+If you want cloud features, set up Supabase with:
+
+1. Create a Supabase project at [supabase.com](https://supabase.com)
+2. Enable Row Level Security (RLS) on `user_diagrams` and `shared_diagrams` tables
+3. Configure authentication providers (Email, Google OAuth)
+4. Add your Supabase URL and anon key to `.env.local`
+
+See [docs/supabase-setup.md](./docs/supabase-setup.md) for detailed instructions.
 
 ## Project Structure
 
@@ -145,14 +161,29 @@ git push origin feature/your-feature-name
 
 ## Roadmap
 
-- [ ] Supabase integration for cloud storage
-- [ ] Shorter share links
+- [x] Supabase integration for cloud storage
+- [x] Shorter share links
+- [x] User authentication (email, magic link, Google OAuth)
+- [x] Password-protected sharing
+- [x] More node types and shapes (rectangle, stadium, diamond, circle, database, subroutine)
+- [x] Custom themes (Ocean, Forest, Sunset, Wood, Lavender)
+- [x] Node resizing and advanced editing
 - [ ] Real-time collaboration
-- [ ] More node types and shapes
 - [ ] Sequence diagram support
-- [ ] Custom themes
 - [ ] Keyboard shortcuts customization
 - [ ] Mobile-responsive editor
+
+## Security
+
+FlowCraft implements multiple security measures:
+
+- **User Data Isolation** - All database queries filter by authenticated user ID
+- **Row Level Security (RLS)** - Supabase enforces access control at the database level
+- **Open Redirect Prevention** - OAuth callbacks validate redirect URLs
+- **Ownership Verification** - Delete operations verify resource ownership
+- **Password-Protected Sharing** - Optional password protection for shared diagrams
+
+To report security vulnerabilities, please email security@example.com or open a private security advisory on GitHub.
 
 ## License
 

@@ -79,8 +79,10 @@ function ShapeWrapper({
     group
   `;
 
+  // Note: Dynamic Tailwind classes like border-[${customColor}] don't work
+  // Instead, we use inline styles for custom colors
   const borderClass = customColor
-    ? `border-2 border-[${customColor}]`
+    ? 'border-2'
     : `border ${nodeStyle.borderColor}`;
 
   const borderStyleClass =

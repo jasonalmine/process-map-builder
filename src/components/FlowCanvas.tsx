@@ -75,6 +75,8 @@ function ControlButton({
     <button
       onClick={onClick}
       disabled={disabled}
+      aria-label={label}
+      aria-pressed={isActive}
       className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors w-full text-left ${
         disabled
           ? 'opacity-40 cursor-not-allowed'
@@ -393,13 +395,20 @@ function FlowCanvasInner() {
       const nodeType = event.dataTransfer.getData('application/flowcraft-node-type') as NodeType;
       if (!nodeType) return;
 
-      const position = screenToFlowPosition({
+      const rawPosition = screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
       });
 
+      // Snap to 20px grid to match the snapGrid setting
+      const position = {
+        x: Math.round(rawPosition.x / 20) * 20,
+        y: Math.round(rawPosition.y / 20) * 20,
+      };
+
+      // Use crypto.randomUUID() to prevent duplicate IDs on rapid creation
       const newNode = {
-        id: `node_${Date.now()}`,
+        id: `node_${crypto.randomUUID()}`,
         type: 'processNode',
         position,
         data: {

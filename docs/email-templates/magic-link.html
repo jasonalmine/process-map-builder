@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in to FlowCraft</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #0a0a0a;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    .card {
+      background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
+      border: 1px solid #27272a;
+      border-radius: 16px;
+      padding: 40px;
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo-text {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    h1 {
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 600;
+      text-align: center;
+      margin: 0 0 16px 0;
+    }
+    p {
+      color: #a1a1aa;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0 0 24px 0;
+      text-align: center;
+    }
+    .button {
+      display: block;
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #9333ea 0%, #4f46e5 100%);
+      color: #ffffff !important;
+      text-decoration: none;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 10px;
+      margin: 24px 0;
+      box-sizing: border-box;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid #27272a;
+    }
+    .footer p {
+      color: #71717a;
+      font-size: 13px;
+      margin: 0 0 8px 0;
+    }
+    .footer a {
+      color: #a855f7;
+      text-decoration: none;
+    }
+    .small {
+      font-size: 13px;
+      color: #71717a;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo">
+        <span class="logo-text">FlowCraft</span>
+      </div>
+
+      <h1>Sign in to FlowCraft</h1>
+
+      <p>Click the button below to sign in to your account. This link will expire in 24 hours.</p>
+
+      <a href="{{ .ConfirmationURL }}" class="button">Sign In to FlowCraft</a>
+
+      <p class="small">If you didn't request this email, you can safely ignore it.</p>
+
+      <div class="footer">
+        <p>&copy; 2025 Ventryx. All rights reserved.</p>
+        <p><a href="https://flowcraft.ventryx.ai">flowcraft.ventryx.ai</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

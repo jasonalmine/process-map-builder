@@ -32,7 +32,7 @@ export function UserMenu({ theme }: UserMenuProps) {
     return null;
   }
 
-  const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User';
+  const displayName = user.user_metadata?.full_name || user.user_metadata?.name || (user.email ? user.email.split('@')[0] : null) || 'User';
   const avatarUrl = user.user_metadata?.avatar_url;
   const email = user.email;
 
@@ -47,6 +47,9 @@ export function UserMenu({ theme }: UserMenuProps) {
     <div ref={menuRef} className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-label="User menu"
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
         className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
           theme === 'dark'
             ? 'hover:bg-gray-800 text-gray-300 hover:text-white'
@@ -139,6 +142,7 @@ export function UserMenu({ theme }: UserMenuProps) {
               <button
                 onClick={handleSignOut}
                 disabled={isSigningOut}
+                aria-label={isSigningOut ? 'Signing out' : 'Sign out'}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
                   theme === 'dark'
                     ? 'hover:bg-gray-800 text-gray-300 hover:text-white'

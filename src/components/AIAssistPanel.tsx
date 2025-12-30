@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { useThemeStore } from '@/store/themeStore';
 import {
   Wand2,
@@ -80,7 +80,7 @@ interface AIAssistPanelProps {
   onMermaidGenerated: (mermaid: string) => void;
 }
 
-export default function AIAssistPanel({ onMermaidGenerated }: AIAssistPanelProps) {
+function AIAssistPanel({ onMermaidGenerated }: AIAssistPanelProps) {
   const [description, setDescription] = useState('');
   const [copied, setCopied] = useState(false);
   const [selectedAI, setSelectedAI] = useState<string | null>(null);
@@ -302,3 +302,5 @@ Example: When a customer submits a contact form, send them a welcome email, wait
     </div>
   );
 }
+
+export default memo(AIAssistPanel);
