@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Workflow, Moon, Sun, ChevronDown } from 'lucide-react';
+import { Workflow, Moon, Sun, ChevronDown, Cloud } from 'lucide-react';
 import { useFlowStore } from '@/store/flowStore';
 import { useThemeStore } from '@/store/themeStore';
 import { useViewModeStore } from '@/store/viewModeStore';
@@ -10,6 +10,8 @@ import { sampleFlows } from '@/data/sampleFlows';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { UserMenu } from '@/components/auth/UserMenu';
 import HeaderControls from '@/components/HeaderControls';
+import { useAuthStore } from '@/store/authStore';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 const FlowCanvas = dynamic(() => import('@/components/FlowCanvas'), {
   ssr: false,
@@ -36,7 +38,9 @@ export default function Home() {
   const loadSampleFlow = useFlowStore((state) => state.loadSampleFlow);
   const { theme, toggleTheme } = useThemeStore();
   const isViewMode = useViewModeStore((state) => state.isViewMode);
+  const user = useAuthStore((state) => state.user);
   const hasNodes = nodes.length > 0;
+  const showCloudSync = isSupabaseConfigured && user && !isViewMode;
 
   // Apply theme to html element
   useEffect(() => {
@@ -74,6 +78,18 @@ export default function Home() {
                 {isViewMode ? 'Shared Flowchart' : 'by Ventryx'}
               </p>
             </div>
+
+            {/* Cloud Sync Status */}
+            {showCloudSync && (
+              <div className={`hidden sm:flex items-center gap-1.5 ml-4 px-2.5 py-1 rounded-full text-xs font-medium ${
+                theme === 'dark'
+                  ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                  : 'bg-green-50 text-green-600 border border-green-200'
+              }`}>
+                <Cloud className="w-3.5 h-3.5" />
+                <span>Cloud sync enabled</span>
+              </div>
+            )}
           </div>
 
           <nav className="flex items-center gap-2">
